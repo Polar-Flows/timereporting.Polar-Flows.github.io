@@ -1,8 +1,8 @@
 // auth.js - MSAL.js v3 helpers
 //
-// Depends on the global `msal` object loaded via:
-// <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/dist/msal-browser.min.js"></script>
+// Imports MSAL directly as an ES module via esm.sh (no script tag needed).
 
+import { PublicClientApplication } from 'https://esm.sh/@azure/msal-browser@3';
 import { config } from './config.js';
 
 const STORAGE_SCOPES = ['https://storage.azure.com/user_impersonation'];
@@ -12,7 +12,7 @@ let _client = null;
 async function getClient() {
   if (_client) return _client;
 
-  _client = new msal.PublicClientApplication({
+  _client = new PublicClientApplication({
     auth: {
       clientId: config.auth.clientId,
       authority: `https://login.microsoftonline.com/${config.auth.tenantId}`,
