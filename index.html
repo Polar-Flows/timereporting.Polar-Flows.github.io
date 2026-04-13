@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Time Reporting - Polar Flows</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <!-- MSAL.js v3 - Azure AD authentication -->
+  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/dist/msal-browser.min.js"></script>
+  <style>
+    nav ul {
+      display: flex;
+      gap: 0.75rem;
+      list-style: none;
+      padding: 0;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+    }
+    nav ul li a {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--pico-primary);
+      border-radius: var(--pico-border-radius);
+      text-decoration: none;
+    }
+    nav ul li a:hover {
+      background: var(--pico-primary-background);
+    }
+    .user-info {
+      color: var(--pico-muted-color);
+      font-size: 0.9rem;
+      margin-bottom: 0;
+    }
+    .error { color: var(--pico-del-color, #c0392b); }
+    #status-msg { min-height: 1.2rem; font-size: 0.85rem; color: var(--pico-muted-color); }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <hgroup>
+      <h1>Polar Flows</h1>
+      <p>Internal Time Reporting</p>
+    </hgroup>
+
+    <!-- Loading state -->
+    <div id="view-loading">
+      <p aria-busy="true">Loading...</p>
+    </div>
+
+    <!-- Logged-out state -->
+    <div id="view-logged-out" hidden>
+      <p>Sign in with your Polar Flows Microsoft account to continue.</p>
+      <button id="btn-login">Sign in with Microsoft</button>
+    </div>
+
+    <!-- Logged-in state -->
+    <div id="view-logged-in" hidden>
+      <p class="user-info">
+        Signed in as <strong id="user-name"></strong>
+        &nbsp;&bull;&nbsp;
+        <span id="user-email"></span>
+      </p>
+
+      <nav aria-label="App navigation">
+        <ul>
+          <li><a href="log.html">Log Time</a></li>
+          <li><a href="my-entries.html">My Entries</a></li>
+          <li><a href="visualize.html">Visualize</a></li>
+          <li id="admin-nav" hidden><a href="admin/projects.html">Admin: Projects</a></li>
+        </ul>
+      </nav>
+
+      <p id="status-msg"></p>
+
+      <hr>
+      <small>
+        <a href="#" id="btn-logout" style="color: var(--pico-muted-color)">Sign out</a>
+      </small>
+    </div>
+  </main>
+
+  <script type="module">
+    import { handleRedirectAndGetAccount, login, logout, getCurrentUser } from './auth.js';
+    import { canWriteAdmin } from './storage.js';
+
+    const viewLoading   = document.getElementById('view-loading');
+    const viewLoggedOut = document.getElementById('view-logged-out');
+    const viewLoggedIn  = document.getElementById('view-logged-in');
+    const statusMsg     = document.getElementById('status-msg');
+
+    document.getElementById('btn-login').addEventListener('click', () => login());
+    document.getElementById('btn-logout').addEventListener('click', (e) => {
+      e.preventDefault();
+      logout();
+    });
+
+    try {
+      const account = await handleRedirectAndGetAccount();
+      viewLoading.hidden = true;
+
+      if (account) {
+        const user = await getCurrentUser();
+        document.getElementById('user-name').textContent = user.name;
+        document.getElementById('user-email').textContent = user.email;
+        viewLoggedIn.hidden = false;
+
+        // Check admin access asynchronously - do not block the page
+        statusMsg.textContent = 'Checking permissions...';
+        canWriteAdmin()
+          .then(isAdmin => {
+            statusMsg.textContent = '';
+            if (isAdmin) {
+              document.getElementById('admin-nav').hidden = false;
+            }
+          })
+          .catch(() => {
+            statusMsg.textContent = '';
+          });
+      } else {
+        viewLoggedOut.hidden = false;
+      }
+    } catch (err) {
+      viewLoading.innerHTML = `<p class="error">Error initialising auth: ${err.message}</p>
+        <p><small>Check that <code>config.js</code> has valid clientId and tenantId values.</small></p>`;
+      console.error('[timereport] auth error', err);
+    }
+  </script>
+</body>
+</html>
