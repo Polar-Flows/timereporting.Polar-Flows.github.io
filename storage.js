@@ -99,15 +99,8 @@ export async function dataList(prefix) {
 // Returns true if the current user has write access to admin storage.
 // Used to determine whether to show the admin UI.
 export async function canWriteAdmin() {
-  const testBlob = '.access-check';
   try {
-    await adminWrite(testBlob, { ok: true });
-    // Best-effort cleanup - failure here does not matter
-    const { accountName, containerName } = config.adminStorage;
-    fetch(`https://${accountName}.blob.core.windows.net/${containerName}/${testBlob}`, {
-      method: 'DELETE',
-      headers: await authHeaders(),
-    }).catch(() => {});
+    await adminWrite('.access-check', { ok: true });
     return true;
   } catch {
     return false;
