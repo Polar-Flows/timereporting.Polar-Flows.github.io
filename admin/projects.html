@@ -39,13 +39,14 @@
     .success { color: #2e7d32; }
 
     /* Modal */
-    dialog { max-width: 560px; width: 100%; border-radius: var(--pico-border-radius); padding: 2rem; }
+    dialog { max-width: 560px; width: 100%; border-radius: var(--pico-border-radius); padding: 2rem; flex-direction: column; }
     dialog h2 { margin-top: 0; margin-bottom: 1.5rem; font-size: 1.2rem; }
-    dialog .field { margin-bottom: 1.2rem; }
-    dialog label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
-    dialog input, dialog select { width: 100%; margin-bottom: 0; }
-    dialog .hint { font-size: 0.78rem; color: var(--pico-muted-color); margin-top: 0.25rem; }
-    dialog .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
+    dialog .field { margin-top: 0; margin-bottom: 1.2rem; }
+    dialog label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 0; margin-bottom: 0.3rem; }
+    dialog input, dialog select { width: 100%; margin-top: 0; margin-bottom: 0; }
+    dialog .hint { font-size: 0.78rem; color: var(--pico-muted-color); margin-top: 0.25rem; margin-bottom: 0; }
+    dialog .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.2rem; }
+    dialog .row-2 > .field { align-self: start; margin-bottom: 0; }
     dialog .modal-footer { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem; }
     dialog .modal-footer button { width: auto; margin: 0; }
 
