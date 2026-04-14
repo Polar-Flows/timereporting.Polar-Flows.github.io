@@ -30,10 +30,12 @@ function dataBlobUrl(blobPath) {
 // ---- Admin storage (read-only for employees, read-write for admin) ----
 
 // Reads and parses a JSON blob from admin storage.
+// Returns null if the blob does not exist (404). Throws on other errors.
 export async function adminRead(blobName) {
   const res = await fetch(adminBlobUrl(blobName), {
     headers: await authHeaders(),
   });
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`adminRead(${blobName}): HTTP ${res.status}`);
   return res.json();
 }
