@@ -438,7 +438,7 @@
           <button id="viz-btn-summary-day" class="secondary outline">Summary (Days)</button>
         </div>
         <div style="display:flex;gap:0.5rem;align-items:center;">
-          <button id="viz-btn-broker" class="secondary outline" hidden>Copy for broker</button>
+          <button id="viz-btn-broker" class="secondary outline" hidden>Copy for Addanex</button>
           <button id="viz-btn-export" class="secondary outline">Export CSV</button>
         </div>
       </div>
@@ -486,6 +486,7 @@
               <th>Billable</th>
               <th>Period</th>
               <th>Requires task ID</th>
+              <th>Addanex</th>
               <th class="col-tags">Predefined task IDs</th>
               <th class="col-tags">Allowed consultants</th>
               <th></th>
@@ -539,6 +540,11 @@
         <label for="pm-requires-task">Requires task ID</label>
         <select id="pm-requires-task"><option value="false">No</option><option value="true">Yes</option></select>
       </div>
+    </div>
+    <div class="field">
+      <label for="pm-addanex">Addanex integration</label>
+      <select id="pm-addanex"><option value="false">Disabled</option><option value="true">Enabled</option></select>
+      <p class="hint">When enabled, "Copy for Addanex" appears in Visualize for this project.</p>
     </div>
     <div class="row-2">
       <div class="field"><label for="pm-start">Start date</label><input id="pm-start" type="date"><p class="hint">Optional. Display only.</p></div>
@@ -1170,6 +1176,7 @@
         vizRender();
       }
       function vizRender() {
+        updateVizBtns();
         const month   = monthSelect.value;
         const project = projSelect.value;
         const filtered = vizEntries
@@ -1282,9 +1289,11 @@
         document.getElementById('viz-btn-detailed').className        = vizView==='detailed'        ? '' : 'secondary outline';
         document.getElementById('viz-btn-summary-project').className = vizView==='summary-project' ? '' : 'secondary outline';
         document.getElementById('viz-btn-summary-day').className     = vizView==='summary-day'     ? '' : 'secondary outline';
-        const isDaySummary = vizView === 'summary-day';
-        document.getElementById('viz-btn-broker').hidden  = !isDaySummary;
-        document.getElementById('viz-addanex-row').hidden = !isDaySummary;
+        const selProject = projSelect.value;
+        const proj = allProjects.find(p => p.name === selProject);
+        const showAddanex = vizView === 'summary-day' && !!proj?.addanexEnabled;
+        document.getElementById('viz-btn-broker').hidden  = !showAddanex;
+        document.getElementById('viz-addanex-row').hidden = !showAddanex;
       }
       function vizSetStatus(msg, type) {
         const el = document.getElementById('viz-status'); el.textContent=msg; el.className=type||'';
@@ -1329,6 +1338,7 @@
         document.getElementById('pm-id').value          = p.id   || '';
         document.getElementById('pm-billable').value    = p.billable === false ? 'false' : 'true';
         document.getElementById('pm-requires-task').value = p.requiresTaskId ? 'true' : 'false';
+        document.getElementById('pm-addanex').value     = p.addanexEnabled ? 'true' : 'false';
         document.getElementById('pm-start').value       = p.startDate || '';
         document.getElementById('pm-end').value         = p.endDate   || '';
         document.getElementById('pm-task-ids').value    = (p.taskIds || []).join(', ');
@@ -1340,17 +1350,18 @@
 
       async function admSaveModal() {
         const name         = document.getElementById('pm-name').value.trim();
-        const billable     = document.getElementById('pm-billable').value === 'true';
-        const requiresTask = document.getElementById('pm-requires-task').value === 'true';
-        const startDate    = document.getElementById('pm-start').value || null;
-        const endDate      = document.getElementById('pm-end').value   || null;
-        const taskIds      = splitCSV(document.getElementById('pm-task-ids').value);
-        const consultants  = splitCSV(document.getElementById('pm-consultants').value);
+        const billable      = document.getElementById('pm-billable').value === 'true';
+        const requiresTask  = document.getElementById('pm-requires-task').value === 'true';
+        const addanexEnabled = document.getElementById('pm-addanex').value === 'true';
+        const startDate     = document.getElementById('pm-start').value || null;
+        const endDate       = document.getElementById('pm-end').value   || null;
+        const taskIds       = splitCSV(document.getElementById('pm-task-ids').value);
+        const consultants   = splitCSV(document.getElementById('pm-consultants').value);
         if (!name) { alert('Project name is required.'); return; }
         const isNew = editingIndex === null;
         const id    = isNew ? slugify(name) : admProjects[editingIndex].id;
         if (isNew && admProjects.some(p => p.id === id)) { alert(`A project with ID "${id}" already exists.`); return; }
-        const updated = { id, name, billable, requiresTaskId: requiresTask, startDate, endDate, taskIds, allowedConsultants: consultants };
+        const updated = { id, name, billable, requiresTaskId: requiresTask, addanexEnabled, startDate, endDate, taskIds, allowedConsultants: consultants };
         if (isNew) admProjects.push(updated); else admProjects[editingIndex] = updated;
         try { await admSaveProjects(); modal.close(); admRenderTable(); } catch {}
       }
@@ -1368,6 +1379,7 @@
             <td class="${p.billable?'billable-yes':'billable-no'}">${p.billable?'Yes':'No'}</td>
             <td>${formatPeriod(p.startDate, p.endDate)}</td>
             <td>${p.requiresTaskId?'Yes':'<span class="muted">No</span>'}</td>
+            <td>${p.addanexEnabled?'<span class="billable-yes">Yes</span>':'<span class="muted">—</span>'}</td>
             <td class="col-tags">${renderTags(p.taskIds)}</td>
             <td class="col-tags">${renderTags(p.allowedConsultants)}</td>
             <td><div class="adm-actions">
