@@ -9,10 +9,40 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
   <style>
     .back-link { font-size: 0.9rem; margin-bottom: 1.5rem; display: block; }
+
+    /* Mode toggle */
+    .mode-toggle { display: flex; gap: 0; margin-bottom: 1.5rem; max-width: 480px; }
+    .mode-toggle button { margin: 0; width: auto; flex: 1; border-radius: 0; font-size: 0.9rem; }
+    .mode-toggle button:first-child { border-radius: var(--pico-border-radius) 0 0 var(--pico-border-radius); }
+    .mode-toggle button:last-child  { border-radius: 0 var(--pico-border-radius) var(--pico-border-radius) 0; }
+
+    /* Single entry form */
     form { max-width: 480px; }
     label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 0; margin-bottom: 0.3rem; }
     input, select, textarea { width: 100%; margin-top: 0; margin-bottom: 1rem; }
-    .error   { color: var(--pico-del-color, #c62828); font-size: 0.9rem; }
+
+    /* Paste mode */
+    #paste-section { max-width: 680px; }
+    #paste-section label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 0; margin-bottom: 0.3rem; }
+    #paste-section select { width: 100%; margin-top: 0; margin-bottom: 1rem; max-width: 480px; }
+    #paste-section textarea { width: 100%; margin-top: 0; margin-bottom: 0.5rem; font-family: monospace; font-size: 0.8rem; }
+    .paste-actions { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+    .paste-actions button { width: auto; margin: 0; }
+
+    /* Preview */
+    #preview-wrap { margin-top: 1rem; }
+    .preview-table { font-size: 0.85rem; width: 100%; }
+    .preview-table th, .preview-table td { white-space: normal; vertical-align: top; }
+    .preview-table .col-date  { white-space: nowrap; width: 110px; }
+    .preview-table .col-task  { white-space: nowrap; }
+    .preview-table .col-hours { text-align: right; width: 60px; }
+    .verify-ok   { color: #2e7d32; font-size: 0.85rem; margin: 0.5rem 0 1rem; }
+    .verify-warn { color: #e65100; font-size: 0.85rem; margin: 0.5rem 0 1rem; }
+    #paste-save-wrap { margin-top: 0.5rem; }
+    #paste-save-wrap button { width: auto; }
+
+    /* Shared */
+    .error { color: var(--pico-del-color, #c62828); font-size: 0.9rem; }
     .success-box {
       max-width: 480px;
       border: 1px solid #2e7d32;
@@ -38,6 +68,13 @@
       No projects are assigned to your account. Ask an admin to add you to a project first.
     </p>
 
+    <!-- Mode toggle -->
+    <div class="mode-toggle" id="mode-toggle" hidden>
+      <button id="btn-mode-single" type="button">Single entry</button>
+      <button id="btn-mode-paste" type="button" class="secondary outline">Paste from customer portal</button>
+    </div>
+
+    <!-- ── Single entry form ── -->
     <form id="log-form" hidden novalidate>
       <label for="f-date">Date</label>
       <input id="f-date" type="date" required>
@@ -65,11 +102,47 @@
       <button type="submit" id="btn-save">Save entry</button>
     </form>
 
+    <!-- ── Paste mode ── -->
+    <div id="paste-section" hidden>
+      <label for="p-project">Project</label>
+      <select id="p-project">
+        <option value="">Select a project...</option>
+      </select>
+
+      <label for="p-paste">Paste your weekly timesheet here</label>
+      <textarea id="p-paste" rows="10" placeholder="Copy the timesheet from the customer portal and paste it here..."></textarea>
+
+      <div class="paste-actions">
+        <button id="btn-parse" type="button">Parse entries</button>
+        <span id="parse-error" class="error"></span>
+      </div>
+
+      <div id="preview-wrap" hidden>
+        <table class="preview-table">
+          <thead>
+            <tr>
+              <th class="col-date">Date</th>
+              <th class="col-task">Task ID</th>
+              <th class="col-hours">Hours</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody id="preview-tbody"></tbody>
+        </table>
+        <p id="verify-line"></p>
+        <div id="paste-save-wrap">
+          <button id="btn-paste-save" type="button">Save all entries</button>
+          <p id="paste-save-error" class="error"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success state (shared) -->
     <div id="view-success" hidden>
       <div class="success-box">
-        <p>Entry saved.</p>
+        <p id="success-msg">Entry saved.</p>
         <div class="success-actions">
-          <button id="btn-another">Log another entry</button>
+          <button id="btn-another">Log another</button>
           <a href="my-entries.html">View my entries &rarr;</a>
         </div>
       </div>
@@ -84,10 +157,13 @@
 
     const viewLoading    = document.getElementById('view-loading');
     const viewNoProjects = document.getElementById('view-no-projects');
+    const modeToggle     = document.getElementById('mode-toggle');
     const logForm        = document.getElementById('log-form');
+    const pasteSection   = document.getElementById('paste-section');
     const viewSuccess    = document.getElementById('view-success');
     const formError      = document.getElementById('form-error');
     const projectSelect  = document.getElementById('f-project');
+    const pasteProject   = document.getElementById('p-project');
 
     // Auth
     const account = await handleRedirectAndGetAccount();
@@ -108,24 +184,43 @@
       return;
     }
 
-    // Populate project dropdown
+    // Populate both project dropdowns
     myProjects.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.name + (p.billable ? '' : ' (non-billable)');
-      projectSelect.appendChild(opt);
+      const label = p.name + (p.billable ? '' : ' (non-billable)');
+      [projectSelect, pasteProject].forEach(sel => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      });
     });
 
     // Default date = today
     document.getElementById('f-date').value = todayISO();
 
+    // Show UI
+    modeToggle.hidden = false;
     logForm.hidden = false;
+    let currentMode = 'single';
 
-    // Update task field whenever project changes
+    // ---- Mode toggle ----
+    document.getElementById('btn-mode-single').addEventListener('click', () => setMode('single'));
+    document.getElementById('btn-mode-paste').addEventListener('click',  () => setMode('paste'));
+
+    function setMode(mode) {
+      currentMode = mode;
+      logForm.hidden       = mode !== 'single';
+      pasteSection.hidden  = mode !== 'paste';
+      viewSuccess.hidden   = true;
+      document.getElementById('btn-mode-single').className = mode === 'single' ? '' : 'secondary outline';
+      document.getElementById('btn-mode-paste').className  = mode === 'paste'  ? '' : 'secondary outline';
+    }
+
+    // ---- Single entry form ----
+
     projectSelect.addEventListener('change', () => renderTaskField());
     renderTaskField();
 
-    // Submit
     logForm.addEventListener('submit', async e => {
       e.preventDefault();
       formError.textContent = '';
@@ -146,28 +241,14 @@
         return;
       }
 
-      const period   = date.slice(0, 7); // YYYY-MM
-      const blobPath = `entries/${user.email}/${period}.json`;
-
       const btn = document.getElementById('btn-save');
       btn.setAttribute('aria-busy', 'true');
       btn.disabled = true;
 
       try {
-        let file = await dataRead(blobPath);
-        if (!file) file = { consultant: user.email, period, entries: [] };
-
-        file.entries.push({
-          id: crypto.randomUUID(),
-          date,
-          projectId,
-          hours,
-          taskId,
-          description: desc,
-        });
-
-        await dataWrite(blobPath, file);
-        logForm.hidden   = true;
+        await saveEntries([{ id: crypto.randomUUID(), date, projectId, hours, taskId, description: desc }]);
+        document.getElementById('success-msg').textContent = 'Entry saved.';
+        logForm.hidden     = true;
         viewSuccess.hidden = false;
       } catch (err) {
         formError.textContent = 'Failed to save: ' + err.message;
@@ -177,17 +258,201 @@
       }
     });
 
-    // Log another
-    document.getElementById('btn-another').addEventListener('click', () => {
-      logForm.reset();
-      document.getElementById('f-date').value = todayISO();
-      renderTaskField();
-      formError.textContent = '';
-      viewSuccess.hidden = true;
-      logForm.hidden = false;
+    // ---- Paste mode ----
+
+    let parsedEntries = []; // populated by parser, consumed by save
+
+    document.getElementById('p-paste').addEventListener('paste', () => {
+      // Give the browser time to insert the pasted text before parsing
+      setTimeout(() => tryParse(), 50);
     });
 
-    // ---- Helpers ----
+    document.getElementById('btn-parse').addEventListener('click', () => tryParse());
+
+    function tryParse() {
+      const raw = document.getElementById('p-paste').value;
+      const parseError = document.getElementById('parse-error');
+      parseError.textContent = '';
+      document.getElementById('preview-wrap').hidden = true;
+      parsedEntries = [];
+
+      if (!raw.trim()) return;
+
+      const result = parseTimesheet(raw);
+
+      if (result.parseError) {
+        parseError.textContent = result.parseError;
+        return;
+      }
+      if (!result.entries.length) {
+        parseError.textContent = 'No non-zero entries found in the pasted timesheet.';
+        return;
+      }
+
+      parsedEntries = result.entries;
+      renderPreview(result.entries, result.expectedTotal);
+    }
+
+    function renderPreview(entries, expectedTotal) {
+      const tbody = document.getElementById('preview-tbody');
+      tbody.innerHTML = entries.map(e => `
+        <tr>
+          <td class="col-date">${esc(e.date)}</td>
+          <td class="col-task">${esc(e.taskId || '-')}</td>
+          <td class="col-hours">${e.hours}</td>
+          <td>${esc(e.description || '')}</td>
+        </tr>`).join('');
+
+      const totalHours = entries.reduce((s, e) => s + e.hours, 0);
+      const verifyEl   = document.getElementById('verify-line');
+
+      let msg = `${entries.length} entries · ${totalHours}h total`;
+      if (expectedTotal !== null) {
+        if (totalHours === expectedTotal) {
+          verifyEl.className = 'verify-ok';
+          msg += ` · Expected ${expectedTotal}h ✓`;
+        } else {
+          verifyEl.className = 'verify-warn';
+          msg += ` · Expected ${expectedTotal}h ⚠ totals do not match`;
+        }
+      } else {
+        verifyEl.className = '';
+      }
+      verifyEl.textContent = msg;
+
+      document.getElementById('paste-save-error').textContent = '';
+      document.getElementById('preview-wrap').hidden = false;
+    }
+
+    document.getElementById('btn-paste-save').addEventListener('click', async () => {
+      const projectId = pasteProject.value;
+      if (!projectId) {
+        document.getElementById('parse-error').textContent = 'Please select a project first.';
+        return;
+      }
+      if (!parsedEntries.length) return;
+
+      const btn = document.getElementById('btn-paste-save');
+      btn.setAttribute('aria-busy', 'true');
+      btn.disabled = true;
+      document.getElementById('paste-save-error').textContent = '';
+
+      try {
+        const count = parsedEntries.length;
+        await saveEntries(parsedEntries.map(e => ({ ...e, projectId })));
+        document.getElementById('success-msg').textContent = `${count} entries saved.`;
+        pasteSection.hidden  = true;
+        viewSuccess.hidden   = false;
+      } catch (err) {
+        document.getElementById('paste-save-error').textContent = 'Failed to save: ' + err.message;
+      } finally {
+        btn.removeAttribute('aria-busy');
+        btn.disabled = false;
+      }
+    });
+
+    // "Log another" — reset whichever mode we were in
+    document.getElementById('btn-another').addEventListener('click', () => {
+      viewSuccess.hidden = true;
+      if (currentMode === 'single') {
+        logForm.reset();
+        document.getElementById('f-date').value = todayISO();
+        renderTaskField();
+        formError.textContent = '';
+        logForm.hidden = false;
+      } else {
+        document.getElementById('p-paste').value = '';
+        document.getElementById('parse-error').textContent = '';
+        document.getElementById('preview-wrap').hidden = true;
+        parsedEntries = [];
+        pasteSection.hidden = false;
+      }
+    });
+
+    // ---- Save helper (handles multi-month) ----
+
+    async function saveEntries(entries) {
+      // Group entries by YYYY-MM period
+      const byPeriod = {};
+      entries.forEach(entry => {
+        const period = entry.date.slice(0, 7);
+        if (!byPeriod[period]) byPeriod[period] = [];
+        byPeriod[period].push(entry);
+      });
+
+      // Write each period file, loading existing data first
+      await Promise.all(Object.entries(byPeriod).map(async ([period, periodEntries]) => {
+        const filePath = `entries/${user.email}/${period}.json`;
+        let file = await dataRead(filePath);
+        if (!file) file = { consultant: user.email, period, entries: [] };
+        file.entries.push(...periodEntries);
+        await dataWrite(filePath, file);
+      }));
+    }
+
+    // ---- Timesheet parser ----
+
+    function parseTimesheet(rawText) {
+      const lines = rawText.split('\n').map(l => l.trim());
+
+      // 1. Date range line
+      const rangeLine = lines.find(l => /\w+ \d+ - \w+ \d+,\s*\d{4}/.test(l));
+      if (!rangeLine) return { parseError: 'Could not find a date range (e.g. "March 23 - March 29, 2026").' };
+      const rangeMatch = rangeLine.match(/^(\w+)\s+(\d+)\s*-\s*(\w+)\s+(\d+),\s*(\d{4})/);
+      if (!rangeMatch) return { parseError: 'Date range format not recognised.' };
+      const [, startMonth, startDay, , , year] = rangeMatch;
+      const monthIndex = new Date(`${startMonth} 1, 2000`).getMonth(); // parse month name → 0-based index
+      const startDate  = new Date(Date.UTC(parseInt(year), monthIndex, parseInt(startDay)));
+      if (isNaN(startDate)) return { parseError: `Could not parse start date: ${startMonth} ${startDay}, ${year}.` };
+
+      // 2. Expected total (for verification only)
+      const totalLine    = lines.find(l => /Time Sheet breakdown/i.test(l));
+      const totalMatch   = totalLine && totalLine.match(/(\d+)\s+hrs?/i);
+      const expectedTotal = totalMatch ? parseInt(totalMatch[1]) : null;
+
+      // 3. Locate "Logged Time Cards" table
+      const tableStart = lines.findIndex(l => l === 'Logged Time Cards');
+      if (tableStart === -1) return { parseError: 'Could not find "Logged Time Cards" section in the pasted text.' };
+
+      // 4. Skip 11 column headers:
+      //    Short description, Project time category, Resource plan, Mon–Sun (7 cols), Total
+      const dataStart = tableStart + 1 + 11;
+
+      // 5. All non-empty tokens from the data section
+      const tokens = lines.slice(dataStart).filter(l => l !== '');
+
+      // 6. Process fixed 12-token blocks
+      const entries = [];
+      for (let i = 0; i + 11 < tokens.length; i += 12) {
+        const description = tokens[i];
+        const taskId      = tokens[i + 1] || null;
+        // tokens[i+2] = project time category ("None") — skip
+        // tokens[i+3] = resource plan ("None") — skip
+        for (let d = 0; d < 7; d++) {
+          const hours = parseFloat(tokens[i + 4 + d]);
+          if (!isNaN(hours) && hours > 0) {
+            const date = new Date(startDate);
+            date.setDate(date.getDate() + d);
+            entries.push({
+              id:          crypto.randomUUID(),
+              date:        [
+                             date.getUTCFullYear(),
+                             String(date.getUTCMonth() + 1).padStart(2, '0'),
+                             String(date.getUTCDate()).padStart(2, '0'),
+                           ].join('-'),
+              hours,
+              taskId,
+              description,
+            });
+          }
+        }
+        // tokens[i+11] = row total — skip
+      }
+
+      return { entries, expectedTotal };
+    }
+
+    // ---- Single-entry helpers ----
 
     function renderTaskField() {
       const project = myProjects.find(p => p.id === projectSelect.value);
@@ -202,7 +467,6 @@
       const existing = document.getElementById('f-task');
 
       if (project.taskIds && project.taskIds.length) {
-        // Predefined list — use a <select>
         if (existing.tagName !== 'SELECT') {
           const sel = document.createElement('select');
           sel.id = 'f-task';
@@ -212,7 +476,6 @@
         sel.innerHTML = '<option value="">Select task ID...</option>' +
           project.taskIds.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
       } else {
-        // Free text — use an <input>
         if (existing.tagName !== 'INPUT') {
           const inp = document.createElement('input');
           inp.type        = 'text';
