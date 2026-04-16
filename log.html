@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="data:,">
+  <title>Log Time - Time Reporting</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <style>
+    .back-link { font-size: 0.9rem; margin-bottom: 1.5rem; display: block; }
+    form { max-width: 480px; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 0; margin-bottom: 0.3rem; }
+    input, select, textarea { width: 100%; margin-top: 0; margin-bottom: 1rem; }
+    .error   { color: var(--pico-del-color, #c62828); font-size: 0.9rem; }
+    .success-box {
+      max-width: 480px;
+      border: 1px solid #2e7d32;
+      border-radius: var(--pico-border-radius);
+      padding: 1.5rem;
+    }
+    .success-box p { color: #2e7d32; margin-bottom: 1rem; font-weight: 600; }
+    .success-actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .success-actions button { width: auto; margin: 0; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <a href="index.html" class="back-link">&larr; Back</a>
+    <hgroup>
+      <h1>Log Time</h1>
+      <p id="user-label"></p>
+    </hgroup>
+
+    <div id="view-loading"><p aria-busy="true">Loading projects...</p></div>
+
+    <p id="view-no-projects" class="error" hidden>
+      No projects are assigned to your account. Ask an admin to add you to a project first.
+    </p>
+
+    <form id="log-form" hidden novalidate>
+      <label for="f-date">Date</label>
+      <input id="f-date" type="date" required>
+
+      <label for="f-project">Project</label>
+      <select id="f-project" required>
+        <option value="">Select a project...</option>
+      </select>
+
+      <label for="f-hours">Hours</label>
+      <input id="f-hours" type="number" step="0.5" min="0.5" max="24" placeholder="e.g. 7.5" required>
+
+      <div id="task-wrap" hidden>
+        <label for="f-task">Task ID</label>
+        <input id="f-task" type="text" placeholder="Enter task ID">
+      </div>
+
+      <label for="f-desc">
+        Description
+        <small style="font-weight:normal; color:var(--pico-muted-color)"> — optional</small>
+      </label>
+      <textarea id="f-desc" rows="3" placeholder="Optional notes about this work"></textarea>
+
+      <p id="form-error" class="error"></p>
+      <button type="submit" id="btn-save">Save entry</button>
+    </form>
+
+    <div id="view-success" hidden>
+      <div class="success-box">
+        <p>Entry saved.</p>
+        <div class="success-actions">
+          <button id="btn-another">Log another entry</button>
+          <a href="my-entries.html">View my entries &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { handleRedirectAndGetAccount, getCurrentUser } from './auth.js';
+    import { adminRead, dataRead, dataWrite } from './storage.js';
+
+    (async () => {
+
+    const viewLoading    = document.getElementById('view-loading');
+    const viewNoProjects = document.getElementById('view-no-projects');
+    const logForm        = document.getElementById('log-form');
+    const viewSuccess    = document.getElementById('view-success');
+    const formError      = document.getElementById('form-error');
+    const projectSelect  = document.getElementById('f-project');
+
+    // Auth
+    const account = await handleRedirectAndGetAccount();
+    if (!account) { window.location.href = 'index.html'; return; }
+    const user = await getCurrentUser();
+    document.getElementById('user-label').textContent = user.name;
+
+    // Load projects assigned to this user
+    const allProjects = await adminRead('projects.json') || [];
+    const myProjects  = allProjects.filter(p =>
+      (p.allowedConsultants || []).map(e => e.toLowerCase()).includes(user.email.toLowerCase())
+    );
+
+    viewLoading.hidden = true;
+
+    if (!myProjects.length) {
+      viewNoProjects.hidden = false;
+      return;
+    }
+
+    // Populate project dropdown
+    myProjects.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name + (p.billable ? '' : ' (non-billable)');
+      projectSelect.appendChild(opt);
+    });
+
+    // Default date = today
+    document.getElementById('f-date').value = todayISO();
+
+    logForm.hidden = false;
+
+    // Update task field whenever project changes
+    projectSelect.addEventListener('change', () => renderTaskField());
+    renderTaskField();
+
+    // Submit
+    logForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      formError.textContent = '';
+
+      const projectId = projectSelect.value;
+      const project   = myProjects.find(p => p.id === projectId);
+      const date      = document.getElementById('f-date').value;
+      const hours     = parseFloat(document.getElementById('f-hours').value);
+      const taskEl    = document.getElementById('f-task');
+      const taskId    = taskEl ? taskEl.value.trim() || null : null;
+      const desc      = document.getElementById('f-desc').value.trim() || null;
+
+      if (!projectId)   { formError.textContent = 'Please select a project.'; return; }
+      if (!date)        { formError.textContent = 'Please enter a date.'; return; }
+      if (isNaN(hours)) { formError.textContent = 'Please enter valid hours.'; return; }
+      if (project.requiresTaskId && !taskId) {
+        formError.textContent = 'Task ID is required for this project.';
+        return;
+      }
+
+      const period   = date.slice(0, 7); // YYYY-MM
+      const blobPath = `entries/${user.email}/${period}.json`;
+
+      const btn = document.getElementById('btn-save');
+      btn.setAttribute('aria-busy', 'true');
+      btn.disabled = true;
+
+      try {
+        let file = await dataRead(blobPath);
+        if (!file) file = { consultant: user.email, period, entries: [] };
+
+        file.entries.push({
+          id: crypto.randomUUID(),
+          date,
+          projectId,
+          hours,
+          taskId,
+          description: desc,
+        });
+
+        await dataWrite(blobPath, file);
+        logForm.hidden   = true;
+        viewSuccess.hidden = false;
+      } catch (err) {
+        formError.textContent = 'Failed to save: ' + err.message;
+      } finally {
+        btn.removeAttribute('aria-busy');
+        btn.disabled = false;
+      }
+    });
+
+    // Log another
+    document.getElementById('btn-another').addEventListener('click', () => {
+      logForm.reset();
+      document.getElementById('f-date').value = todayISO();
+      renderTaskField();
+      formError.textContent = '';
+      viewSuccess.hidden = true;
+      logForm.hidden = false;
+    });
+
+    // ---- Helpers ----
+
+    function renderTaskField() {
+      const project = myProjects.find(p => p.id === projectSelect.value);
+      const wrap    = document.getElementById('task-wrap');
+
+      if (!project || !project.requiresTaskId) {
+        wrap.hidden = true;
+        return;
+      }
+
+      wrap.hidden = false;
+      const existing = document.getElementById('f-task');
+
+      if (project.taskIds && project.taskIds.length) {
+        // Predefined list — use a <select>
+        if (existing.tagName !== 'SELECT') {
+          const sel = document.createElement('select');
+          sel.id = 'f-task';
+          wrap.replaceChild(sel, existing);
+        }
+        const sel = document.getElementById('f-task');
+        sel.innerHTML = '<option value="">Select task ID...</option>' +
+          project.taskIds.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+      } else {
+        // Free text — use an <input>
+        if (existing.tagName !== 'INPUT') {
+          const inp = document.createElement('input');
+          inp.type        = 'text';
+          inp.id          = 'f-task';
+          inp.placeholder = 'Enter task ID';
+          wrap.replaceChild(inp, existing);
+        }
+      }
+    }
+
+    function todayISO() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function esc(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    })();
+  </script>
+</body>
+</html>
