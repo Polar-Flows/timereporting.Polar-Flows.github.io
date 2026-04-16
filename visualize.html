@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="data:,">
+  <title>Visualize - Time Reporting</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <style>
+    .back-link { font-size: 0.9rem; margin-bottom: 1.5rem; display: block; }
+
+    /* Controls bar */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 1.2rem;
+      margin-bottom: 1.2rem;
+    }
+    .controls .ctrl { display: flex; flex-direction: column; gap: 0.25rem; }
+    .controls label { font-size: 0.8rem; font-weight: 600; color: var(--pico-muted-color); margin: 0; }
+    .controls select { margin: 0; width: auto; min-width: 140px; }
+    .ctrl-buttons { display: flex; gap: 0.4rem; align-items: flex-end; }
+    .ctrl-buttons button { margin: 0; width: auto; padding: 0.4rem 0.9rem; font-size: 0.85rem; }
+    .view-toggle { display: flex; gap: 0; }
+    .view-toggle button {
+      margin: 0; width: auto; padding: 0.4rem 0.9rem; font-size: 0.85rem;
+      border-radius: 0;
+    }
+    .view-toggle button:first-child { border-radius: var(--pico-border-radius) 0 0 var(--pico-border-radius); }
+    .view-toggle button:last-child  { border-radius: 0 var(--pico-border-radius) var(--pico-border-radius) 0; }
+
+    /* Status */
+    #status { min-height: 1.2rem; font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .error   { color: var(--pico-del-color, #c62828); }
+    .muted   { color: var(--pico-muted-color); }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; font-size: 0.88rem; white-space: nowrap; }
+    td, th { vertical-align: middle; }
+    .col-date    { min-width: 100px; }
+    .col-name    { white-space: normal; min-width: 160px; }
+    .col-notes   { white-space: normal; min-width: 180px; }
+    .col-hours   { text-align: right; }
+    th.col-hours { text-align: right; }
+    .billable-yes { color: #2e7d32; font-weight: 600; }
+    .billable-no  { color: var(--pico-muted-color); }
+    tfoot td { font-weight: 600; border-top: 2px solid var(--pico-table-border-color, #ddd); }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <a href="index.html" class="back-link">&larr; Back</a>
+    <hgroup>
+      <h1>Visualize</h1>
+      <p id="user-label"></p>
+    </hgroup>
+
+    <div id="view-loading"><p aria-busy="true">Loading...</p></div>
+
+    <div id="view-main" hidden>
+      <div class="controls">
+        <div class="ctrl" id="scope-ctrl" hidden>
+          <label for="f-scope">Scope</label>
+          <select id="f-scope">
+            <option value="mine">My entries</option>
+            <option value="all">All consultants</option>
+          </select>
+        </div>
+
+        <div class="ctrl">
+          <label for="f-month">Month</label>
+          <select id="f-month">
+            <option value="all">All time</option>
+          </select>
+        </div>
+
+        <div class="ctrl">
+          <label for="f-project">Project</label>
+          <select id="f-project">
+            <option value="all">All projects</option>
+          </select>
+        </div>
+
+        <div class="ctrl">
+          <label>View</label>
+          <div class="view-toggle">
+            <button id="btn-detailed" class="">Detailed</button>
+            <button id="btn-summary-project" class="secondary outline">Summary - per Project</button>
+            <button id="btn-summary-day" class="secondary outline">Summary - per Day</button>
+          </div>
+        </div>
+
+        <div class="ctrl-buttons">
+          <button id="btn-export" class="secondary outline">Export CSV</button>
+        </div>
+      </div>
+
+      <p id="status"></p>
+
+      <div class="table-wrap">
+        <table id="main-table">
+          <thead id="main-thead"></thead>
+          <tbody id="main-tbody"></tbody>
+          <tfoot id="main-tfoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { handleRedirectAndGetAccount, getCurrentUser } from './auth.js';
+    import { adminRead, dataRead, dataList, canWriteAdmin } from './storage.js';
+
+    (async () => {
+
+    const viewLoading = document.getElementById('view-loading');
+    const viewMain    = document.getElementById('view-main');
+    const status      = document.getElementById('status');
+    const scopeCtrl   = document.getElementById('scope-ctrl');
+    const scopeSelect = document.getElementById('f-scope');
+    const monthSelect = document.getElementById('f-month');
+    const projectSelect = document.getElementById('f-project');
+    const thead         = document.getElementById('main-thead');
+    const tbody         = document.getElementById('main-tbody');
+    const tfoot         = document.getElementById('main-tfoot');
+
+    // Auth
+    const account = await handleRedirectAndGetAccount();
+    if (!account) { window.location.href = 'index.html'; return; }
+    const user = await getCurrentUser();
+    document.getElementById('user-label').textContent = user.name;
+
+    // Check admin (show scope selector if admin)
+    const isAdmin = await canWriteAdmin();
+    if (isAdmin) scopeCtrl.hidden = false;
+
+    // Load projects for name/billable lookup
+    const projects    = await adminRead('projects.json') || [];
+    const projectMap  = Object.fromEntries(projects.map(p => [p.id, p]));
+
+    viewLoading.hidden = true;
+    viewMain.hidden = false;
+
+    // State
+    let allEntries  = []; // loaded for current scope, unfiltered
+    let currentView = 'detailed';
+
+    // Initial load
+    await loadAndRender();
+
+    // ---- Event listeners ----
+    scopeSelect.addEventListener('change', loadAndRender);
+    monthSelect.addEventListener('change', render);
+    projectSelect.addEventListener('change', render);
+
+    document.getElementById('btn-detailed').addEventListener('click', () => {
+      currentView = 'detailed';
+      updateViewButtons();
+      render();
+    });
+    document.getElementById('btn-summary-project').addEventListener('click', () => {
+      currentView = 'summary-project';
+      updateViewButtons();
+      render();
+    });
+    document.getElementById('btn-summary-day').addEventListener('click', () => {
+      currentView = 'summary-day';
+      updateViewButtons();
+      render();
+    });
+
+    document.getElementById('btn-export').addEventListener('click', exportCSV);
+
+    // ---- Load data ----
+    async function loadAndRender() {
+      setStatus('Loading entries...', '');
+      tbody.innerHTML = '';
+      tfoot.innerHTML = '';
+      thead.innerHTML = '';
+
+      try {
+        const scope = scopeSelect.value;
+        let filePaths;
+
+        if (scope === 'all') {
+          filePaths = await dataList('');
+        } else {
+          filePaths = await dataList(`entries/${user.email}/`);
+        }
+
+        // Load all files in parallel
+        const files = await Promise.all(filePaths.map(p => dataRead(p)));
+
+        // Flatten into a single entries array
+        allEntries = [];
+        files.forEach(file => {
+          if (!file || !file.entries) return;
+          file.entries.forEach(entry => {
+            const project = projectMap[entry.projectId];
+            allEntries.push({
+              date:        entry.date,
+              consultant:  file.consultant,
+              projectName: project ? project.name : entry.projectId,
+              billable:    project ? project.billable : null,
+              taskId:      entry.taskId   || null,
+              hours:       entry.hours,
+              description: entry.description || null,
+            });
+          });
+        });
+
+        // Sort by date ascending
+        allEntries.sort((a, b) => a.date.localeCompare(b.date));
+
+        // Populate filters
+        populateMonths();
+        populateProjects();
+        setStatus('', '');
+        render();
+      } catch (err) {
+        setStatus('Failed to load: ' + err.message, 'error');
+      }
+    }
+
+    // ---- Populate filter dropdowns ----
+    function populateMonths() {
+      const current = monthSelect.value;
+      const months  = [...new Set(allEntries.map(e => e.date.slice(0, 7)))].sort().reverse();
+
+      monthSelect.innerHTML = '<option value="all">All time</option>' +
+        months.map(m => `<option value="${m}">${m}</option>`).join('');
+
+      if (months.includes(current)) monthSelect.value = current;
+    }
+
+    function populateProjects() {
+      const current  = projectSelect.value;
+      const names    = [...new Set(allEntries.map(e => e.projectName))].sort();
+
+      projectSelect.innerHTML = '<option value="all">All projects</option>' +
+        names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+
+      if (names.includes(current)) projectSelect.value = current;
+    }
+
+    // ---- Render ----
+    function render() {
+      const month   = monthSelect.value;
+      const project = projectSelect.value;
+      const filtered = allEntries
+        .filter(e => month   === 'all' || e.date.startsWith(month))
+        .filter(e => project === 'all' || e.projectName === project);
+
+      if (currentView === 'detailed')         renderDetailed(filtered);
+      else if (currentView === 'summary-project') renderSummaryProject(filtered);
+      else                                    renderSummaryDay(filtered);
+    }
+
+    function renderDetailed(entries) {
+      const showConsultant = scopeSelect.value === 'all';
+
+      thead.innerHTML = `<tr>
+        <th class="col-date">Date</th>
+        ${showConsultant ? '<th class="col-name">Consultant</th>' : ''}
+        <th class="col-name">Project</th>
+        <th>Billable</th>
+        <th>Task ID</th>
+        <th class="col-hours">Hours</th>
+        <th class="col-notes">Description</th>
+      </tr>`;
+
+      if (!entries.length) {
+        tbody.innerHTML = `<tr><td colspan="${showConsultant ? 7 : 6}" class="muted">No entries.</td></tr>`;
+        tfoot.innerHTML = '';
+        return;
+      }
+
+      tbody.innerHTML = entries.map(e => `
+        <tr>
+          <td class="col-date">${esc(e.date)}</td>
+          ${showConsultant ? `<td class="col-name">${esc(e.consultant)}</td>` : ''}
+          <td class="col-name">${esc(e.projectName)}</td>
+          <td class="${e.billable === true ? 'billable-yes' : 'billable-no'}">
+            ${e.billable === true ? 'Yes' : e.billable === false ? 'No' : '-'}
+          </td>
+          <td>${e.taskId ? esc(e.taskId) : '<span class="muted">-</span>'}</td>
+          <td class="col-hours">${fmt(e.hours)}</td>
+          <td class="col-notes">${e.description ? esc(e.description) : '<span class="muted">-</span>'}</td>
+        </tr>`).join('');
+
+      const total    = entries.reduce((s, e) => s + e.hours, 0);
+      const billable = entries.reduce((s, e) => s + (e.billable ? e.hours : 0), 0);
+      const cols     = showConsultant ? 7 : 6;
+      tfoot.innerHTML = `<tr>
+        <td colspan="${cols - 1}" style="text-align:right">Total:</td>
+        <td class="col-hours">${fmt(total)}</td>
+      </tr><tr>
+        <td colspan="${cols - 1}" style="text-align:right; font-weight:normal; font-size:0.82rem; color:var(--pico-muted-color)">
+          <span class="billable-yes">${fmt(billable)}h billable</span>
+          &nbsp;/&nbsp;
+          <span class="billable-no">${fmt(total - billable)}h non-billable</span>
+        </td>
+        <td></td>
+      </tr>`;
+    }
+
+    function renderSummaryProject(entries) {
+      thead.innerHTML = `<tr>
+        <th>Month</th>
+        <th class="col-name">Project</th>
+        <th>Billable</th>
+        <th>Task ID</th>
+        <th class="col-hours">Hours</th>
+      </tr>`;
+
+      if (!entries.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">No entries.</td></tr>';
+        tfoot.innerHTML = '';
+        return;
+      }
+
+      // Aggregate
+      const groups = {};
+      entries.forEach(e => {
+        const key = `${e.date.slice(0, 7)}||${e.projectName}||${e.billable}||${e.taskId || ''}`;
+        if (!groups[key]) {
+          groups[key] = {
+            month: e.date.slice(0, 7),
+            projectName: e.projectName,
+            billable: e.billable,
+            taskId: e.taskId,
+            hours: 0,
+          };
+        }
+        groups[key].hours += e.hours;
+      });
+
+      const rows = Object.values(groups).sort((a, b) =>
+        a.month.localeCompare(b.month) || a.projectName.localeCompare(b.projectName)
+      );
+
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td>${esc(r.month)}</td>
+          <td class="col-name">${esc(r.projectName)}</td>
+          <td class="${r.billable === true ? 'billable-yes' : 'billable-no'}">
+            ${r.billable === true ? 'Yes' : r.billable === false ? 'No' : '-'}
+          </td>
+          <td>${r.taskId ? esc(r.taskId) : '<span class="muted">-</span>'}</td>
+          <td class="col-hours">${fmt(r.hours)}</td>
+        </tr>`).join('');
+
+      const total    = rows.reduce((s, r) => s + r.hours, 0);
+      const billable = rows.reduce((s, r) => s + (r.billable ? r.hours : 0), 0);
+      tfoot.innerHTML = `<tr>
+        <td colspan="4" style="text-align:right">Total:</td>
+        <td class="col-hours">${fmt(total)}</td>
+      </tr><tr>
+        <td colspan="4" style="text-align:right; font-weight:normal; font-size:0.82rem; color:var(--pico-muted-color)">
+          <span class="billable-yes">${fmt(billable)}h billable</span>
+          &nbsp;/&nbsp;
+          <span class="billable-no">${fmt(total - billable)}h non-billable</span>
+        </td>
+        <td></td>
+      </tr>`;
+    }
+
+    function renderSummaryDay(entries) {
+      thead.innerHTML = `<tr>
+        <th class="col-date">Date</th>
+        <th class="col-name">Project</th>
+        <th>Billable</th>
+        <th class="col-hours">Hours</th>
+      </tr>`;
+
+      if (!entries.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="muted">No entries.</td></tr>';
+        tfoot.innerHTML = '';
+        return;
+      }
+
+      // Aggregate by date + project
+      const groups = {};
+      entries.forEach(e => {
+        const key = `${e.date}||${e.projectName}`;
+        if (!groups[key]) {
+          groups[key] = { date: e.date, projectName: e.projectName, billable: e.billable, hours: 0 };
+        }
+        groups[key].hours += e.hours;
+      });
+
+      const rows = Object.values(groups).sort((a, b) =>
+        a.date.localeCompare(b.date) || a.projectName.localeCompare(b.projectName)
+      );
+
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td class="col-date">${esc(r.date)}</td>
+          <td class="col-name">${esc(r.projectName)}</td>
+          <td class="${r.billable === true ? 'billable-yes' : 'billable-no'}">
+            ${r.billable === true ? 'Yes' : r.billable === false ? 'No' : '-'}
+          </td>
+          <td class="col-hours">${fmt(r.hours)}</td>
+        </tr>`).join('');
+
+      const total    = rows.reduce((s, r) => s + r.hours, 0);
+      const billable = rows.reduce((s, r) => s + (r.billable ? r.hours : 0), 0);
+      tfoot.innerHTML = `<tr>
+        <td colspan="3" style="text-align:right">Total:</td>
+        <td class="col-hours">${fmt(total)}</td>
+      </tr><tr>
+        <td colspan="3" style="text-align:right; font-weight:normal; font-size:0.82rem; color:var(--pico-muted-color)">
+          <span class="billable-yes">${fmt(billable)}h billable</span>
+          &nbsp;/&nbsp;
+          <span class="billable-no">${fmt(total - billable)}h non-billable</span>
+        </td>
+        <td></td>
+      </tr>`;
+    }
+
+    // ---- CSV Export ----
+    function exportCSV() {
+      const month   = monthSelect.value;
+      const project = projectSelect.value;
+      const scope   = scopeSelect.value;
+      const filtered = allEntries
+        .filter(e => month   === 'all' || e.date.startsWith(month))
+        .filter(e => project === 'all' || e.projectName === project);
+
+      let headers, rows;
+
+      if (currentView === 'detailed') {
+        headers = ['Date', 'Consultant', 'Project', 'Billable', 'Task ID', 'Hours', 'Description'];
+        rows    = filtered.map(e => [
+          e.date, e.consultant, e.projectName,
+          e.billable === true ? 'Yes' : e.billable === false ? 'No' : '',
+          e.taskId || '', e.hours, e.description || '',
+        ]);
+      } else if (currentView === 'summary-project') {
+        const groups = {};
+        filtered.forEach(e => {
+          const key = `${e.date.slice(0, 7)}||${e.projectName}||${e.billable}||${e.taskId || ''}`;
+          if (!groups[key]) groups[key] = { month: e.date.slice(0, 7), projectName: e.projectName, billable: e.billable, taskId: e.taskId, hours: 0 };
+          groups[key].hours += e.hours;
+        });
+        headers = ['Month', 'Project', 'Billable', 'Task ID', 'Hours'];
+        rows    = Object.values(groups)
+          .sort((a, b) => a.month.localeCompare(b.month) || a.projectName.localeCompare(b.projectName))
+          .map(r => [
+            r.month, r.projectName,
+            r.billable === true ? 'Yes' : r.billable === false ? 'No' : '',
+            r.taskId || '', r.hours,
+          ]);
+      } else {
+        // summary-day
+        const groups = {};
+        filtered.forEach(e => {
+          const key = `${e.date}||${e.projectName}`;
+          if (!groups[key]) groups[key] = { date: e.date, projectName: e.projectName, billable: e.billable, hours: 0 };
+          groups[key].hours += e.hours;
+        });
+        headers = ['Date', 'Project', 'Billable', 'Hours'];
+        rows    = Object.values(groups)
+          .sort((a, b) => a.date.localeCompare(b.date) || a.projectName.localeCompare(b.projectName))
+          .map(r => [
+            r.date, r.projectName,
+            r.billable === true ? 'Yes' : r.billable === false ? 'No' : '',
+            r.hours,
+          ]);
+      }
+
+      const csv      = csvSerialize(headers, rows);
+      const filename = `timereport-${scope}-${month}.csv`;
+      downloadText(csv, filename);
+    }
+
+    function csvSerialize(headers, rows) {
+      const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      return [headers, ...rows].map(row => row.map(escape).join(',')).join('\r\n');
+    }
+
+    function downloadText(text, filename) {
+      const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ---- Helpers ----
+    function updateViewButtons() {
+      document.getElementById('btn-detailed').className        = currentView === 'detailed'        ? '' : 'secondary outline';
+      document.getElementById('btn-summary-project').className = currentView === 'summary-project' ? '' : 'secondary outline';
+      document.getElementById('btn-summary-day').className     = currentView === 'summary-day'     ? '' : 'secondary outline';
+    }
+
+    function setStatus(msg, type) {
+      status.textContent = msg;
+      status.className   = type || '';
+    }
+
+    function fmt(n) {
+      return Number.isInteger(n) ? String(n) : n.toFixed(1);
+    }
+
+    function esc(str) {
+      return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    })();
+  </script>
+</body>
+</html>

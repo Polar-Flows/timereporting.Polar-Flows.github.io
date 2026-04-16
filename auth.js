@@ -5,7 +5,7 @@
 import { PublicClientApplication } from 'https://esm.sh/@azure/msal-browser@3';
 import { config } from './config.js';
 
-const STORAGE_SCOPES = ['https://storage.azure.com/user_impersonation'];
+const STORAGE_SCOPES = ['https://graph.microsoft.com/Files.ReadWrite'];
 
 let _client = null;
 
