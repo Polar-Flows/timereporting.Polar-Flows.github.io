@@ -64,10 +64,7 @@
       <div class="controls">
         <div class="ctrl" id="scope-ctrl" hidden>
           <label for="f-scope">Scope</label>
-          <select id="f-scope">
-            <option value="mine">My entries</option>
-            <option value="all">All consultants</option>
-          </select>
+          <select id="f-scope"></select>
         </div>
 
         <div class="ctrl">
@@ -112,7 +109,7 @@
 
   <script type="module">
     import { handleRedirectAndGetAccount, getCurrentUser } from './auth.js';
-    import { adminRead, dataRead, dataList, canWriteAdmin } from './storage.js';
+    import { adminRead, dataRead, dataList } from './storage.js';
 
     (async () => {
 
@@ -133,9 +130,8 @@
     const user = await getCurrentUser();
     document.getElementById('user-label').textContent = user.name;
 
-    // Check admin (show scope selector if admin)
-    const isAdmin = await canWriteAdmin();
-    if (isAdmin) scopeCtrl.hidden = false;
+    // Scope selector is visible to everyone
+    scopeCtrl.hidden = false;
 
     // Load projects for name/billable lookup
     const projects    = await adminRead('projects.json') || [];
@@ -182,14 +178,18 @@
       thead.innerHTML = '';
 
       try {
-        const scope = scopeSelect.value;
-        let filePaths;
+        // Discover all available file paths (used for consultant list + scoped loading)
+        const allPaths = await dataList('');
 
-        if (scope === 'all') {
-          filePaths = await dataList('');
-        } else {
-          filePaths = await dataList(`entries/${user.email}/`);
-        }
+        // Extract unique consultant emails from paths and populate scope dropdown
+        const emails = [...new Set(allPaths.map(p => p.split('/')[1]))].sort();
+        populateScope(emails);
+
+        // Load only the files relevant to the selected scope
+        const scope = scopeSelect.value;
+        const filePaths = scope === 'all'
+          ? allPaths
+          : allPaths.filter(p => p.split('/')[1] === scope);
 
         // Load all files in parallel
         const files = await Promise.all(filePaths.map(p => dataRead(p)));
@@ -226,6 +226,20 @@
     }
 
     // ---- Populate filter dropdowns ----
+    function populateScope(emails) {
+      const current = scopeSelect.value;
+      scopeSelect.innerHTML =
+        emails.map(email => {
+          const label = email.split('@')[0];
+          return `<option value="${esc(email)}">${esc(label)}</option>`;
+        }).join('') +
+        '<option value="all">All consultants</option>';
+
+      // Restore previous selection if still valid, else default to current user
+      const valid = [...scopeSelect.options].some(o => o.value === current);
+      scopeSelect.value = valid ? current : user.email;
+    }
+
     function populateMonths() {
       const current = monthSelect.value;
       const months  = [...new Set(allEntries.map(e => e.date.slice(0, 7)))].sort().reverse();
@@ -260,7 +274,7 @@
     }
 
     function renderDetailed(entries) {
-      const showConsultant = scopeSelect.value === 'all';
+      const showConsultant = scopeSelect.value === 'all';  // hide for individual selections
 
       thead.innerHTML = `<tr>
         <th class="col-date">Date</th>
