@@ -421,15 +421,32 @@
       // 5. All non-empty tokens from the data section
       const tokens = lines.slice(dataStart).filter(l => l !== '');
 
-      // 6. Process fixed 12-token blocks
+      // 6. Process task rows — two possible block sizes:
+      //    12-token: description, taskId, None, None, 7×hours, total  (taskId present)
+      //    11-token: description, None, None, 7×hours, total           (no taskId — use description)
+      //    Detect by checking whether tokens[i+1] looks like a task ID (letters + digits).
       const entries = [];
-      for (let i = 0; i + 11 < tokens.length; i += 12) {
+      let i = 0;
+      while (i < tokens.length) {
         const description = tokens[i];
-        const taskId      = tokens[i + 1] || null;
-        // tokens[i+2] = project time category ("None") — skip
-        // tokens[i+3] = resource plan ("None") — skip
+        let taskId, hoursOffset, blockSize;
+
+        if (i + 1 < tokens.length && /^[A-Z]+\d+$/.test(tokens[i + 1])) {
+          // Has explicit task ID (e.g. ENHC0010624, INC0029727)
+          taskId      = tokens[i + 1];
+          hoursOffset = 4;   // skip description, taskId, None, None
+          blockSize   = 12;
+        } else {
+          // No task ID line — fall back to description as task identifier
+          taskId      = description;
+          hoursOffset = 3;   // skip description, None, None
+          blockSize   = 11;
+        }
+
+        if (i + blockSize > tokens.length) break;
+
         for (let d = 0; d < 7; d++) {
-          const hours = parseFloat(tokens[i + 4 + d]);
+          const hours = parseFloat(tokens[i + hoursOffset + d]);
           if (!isNaN(hours) && hours > 0) {
             const date = new Date(startDate);
             date.setDate(date.getDate() + d);
@@ -446,7 +463,8 @@
             });
           }
         }
-        // tokens[i+11] = row total — skip
+        // last token in block is the row total — skip it by advancing blockSize
+        i += blockSize;
       }
 
       return { entries, expectedTotal };

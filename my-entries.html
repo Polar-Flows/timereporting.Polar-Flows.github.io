@@ -70,6 +70,10 @@
         <button class="btn-month-nav secondary outline" id="btn-prev-month" title="Previous month">&larr;</button>
         <input id="f-month" type="month">
         <button class="btn-month-nav secondary outline" id="btn-next-month" title="Next month">&rarr;</button>
+        <label for="f-project" style="margin-left:0.75rem">Project</label>
+        <select id="f-project" style="width:auto;margin:0;min-width:160px">
+          <option value="all">All projects</option>
+        </select>
       </div>
       <p id="status"></p>
 
@@ -179,8 +183,12 @@
     });
 
     // State
-    let file    = null; // the loaded JSON file for the selected month
-    let editId  = null; // ID of the entry being edited
+    let file       = null; // the loaded JSON file for the selected month
+    let allLoaded  = []; // sorted entries for current month, unfiltered
+    let editId     = null; // ID of the entry being edited
+
+    const projectFilter = document.getElementById('f-project');
+    projectFilter.addEventListener('change', applyFilter);
 
     await loadEntries();
 
@@ -191,20 +199,48 @@
       setStatus('Loading...', '');
       tbody.innerHTML = '';
       tfoot.innerHTML = '';
+      allLoaded = [];
       try {
         file = await dataRead(blobPath);
         if (!file || !file.entries || !file.entries.length) {
+          populateProjectFilter([]);
           tbody.innerHTML = '<tr><td colspan="7" class="muted">No entries for this month.</td></tr>';
           setStatus('', '');
           return;
         }
-        const sorted = [...file.entries].sort((a, b) => a.date.localeCompare(b.date));
-        renderRows(sorted);
-        renderTotals(sorted);
+        allLoaded = [...file.entries].sort((a, b) => a.date.localeCompare(b.date));
+        populateProjectFilter(allLoaded);
+        applyFilter();
         setStatus('', '');
       } catch (err) {
         setStatus('Failed to load: ' + err.message, 'error');
       }
+    }
+
+    function populateProjectFilter(entries) {
+      const current = projectFilter.value;
+      const ids = [...new Set(entries.map(e => e.projectId).filter(Boolean))];
+      projectFilter.innerHTML = '<option value="all">All projects</option>' +
+        ids.map(id => {
+          const p = projectMap[id];
+          return `<option value="${esc(id)}">${esc(p ? p.name : id)}</option>`;
+        }).join('');
+      // Restore previous selection if still valid
+      const valid = [...projectFilter.options].some(o => o.value === current);
+      projectFilter.value = valid ? current : 'all';
+    }
+
+    function applyFilter() {
+      if (!allLoaded.length) return;
+      const pid = projectFilter.value;
+      const filtered = pid === 'all' ? allLoaded : allLoaded.filter(e => e.projectId === pid);
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="muted">No entries for the selected project.</td></tr>';
+        tfoot.innerHTML = '';
+        return;
+      }
+      renderRows(filtered);
+      renderTotals(filtered);
     }
 
     // ---- Render table rows ----
