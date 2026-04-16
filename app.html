@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" type="image/png" href="assets/img/Polarflows-logo-favicon.png">
+  <title>Time Reporting - Polar Flows</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <style>
+    /* ── PF brand overrides ──────────────────────────────── */
+    :root {
+      --pico-primary:         #1a4da0;
+      --pico-primary-hover:   #012d75;
+      --pico-primary-focus:   rgba(26,77,160,0.25);
+      --pico-primary-inverse: #fff;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    body { background: #f8fafc !important; --pico-background-color: #f8fafc; }
+
+    /* ── Persistent navbar ───────────────────────────────── */
+    .pf-nav {
+      background: #012d75;
+      position: sticky;
+      top: 0;
+      z-index: 1030;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+    .pf-nav-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 2.5rem;
+      display: flex;
+      align-items: center;
+      height: 78px;
+    }
+    .pf-nav-logo { height: 48px; margin-right: 3rem; flex-shrink: 0; }
+    .pf-nav-links { display: flex; align-items: stretch; flex: 1; }
+    .pf-nav-links button {
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      border-radius: 0;
+      color: rgba(255,255,255,0.72);
+      height: 78px;
+      padding: 0 1.1rem;
+      margin: 0;
+      width: auto;
+      font-size: 0.92rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: color 150ms, background 150ms, border-color 150ms;
+    }
+    .pf-nav-links button:hover { color: #fff; background: rgba(255,255,255,0.08); }
+    .pf-nav-links button.active { color: #fff; font-weight: 600; border-bottom-color: #187ef9; }
+    .pf-nav-user {
+      display: flex; align-items: center; gap: 1rem;
+      font-size: 0.82rem; color: rgba(255,255,255,0.6); flex-shrink: 0;
+      margin-left: 2rem;
+    }
+    .pf-nav-user button {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 4px;
+      color: rgba(255,255,255,0.72);
+      font-size: 0.8rem;
+      font-family: inherit;
+      padding: 0.28rem 0.8rem;
+      margin: 0; width: auto; cursor: pointer;
+    }
+    .pf-nav-user button:hover { border-color: rgba(255,255,255,0.6); color: #fff; }
+
+    /* ── Section wrapper ─────────────────────────────────── */
+    .pf-section { padding: 2rem 1.5rem; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
+    @media (min-width: 768px)  { .pf-section { padding: 2rem 2.5rem; } }
+    @media (min-width: 1200px) { .pf-section { padding: 2rem 4rem; } }
+    #app-loading { padding: 3rem 1.5rem; }
+
+    /* ── Shared ──────────────────────────────────────────── */
+    .error   { color: var(--pico-del-color, #c62828); font-size: 0.9rem; }
+    .success { color: #2e7d32; }
+    .muted   { color: var(--pico-muted-color); }
+    .billable-yes { color: #2e7d32; font-weight: 600; }
+    .billable-no  { color: var(--pico-muted-color); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; font-size: 0.9rem; white-space: nowrap; }
+    td { vertical-align: middle; }
+    tfoot td { font-weight: 600; border-top: 2px solid var(--pico-table-border-color, #ddd); }
+    .col-date    { min-width: 110px; }
+    .col-project { white-space: normal; min-width: 180px; }
+    .col-name    { white-space: normal; min-width: 160px; }
+    .col-notes   { white-space: normal; min-width: 200px; }
+    .col-hours   { text-align: right; }
+    th.col-hours { text-align: right; }
+    .col-tags    { white-space: normal; min-width: 180px; }
+    .btn-month-nav { width: auto; margin: 0; padding: 0.3rem 0.7rem; font-size: 1rem; line-height: 1; }
+
+    /* ── Log Time ────────────────────────────────────────── */
+    .mode-toggle { display: flex; gap: 0; margin-bottom: 1.5rem; }
+    .mode-toggle button { margin: 0; width: auto; flex: 1 0 auto; border-radius: 0; font-size: 0.9rem; }
+    .mode-toggle button:first-child { border-radius: var(--pico-border-radius) 0 0 var(--pico-border-radius); }
+    .mode-toggle button:last-child  { border-radius: 0 var(--pico-border-radius) var(--pico-border-radius) 0; }
+    /* Active tab = dark header navy so it clearly differs from the gray outline inactive tabs */
+    .mode-toggle button:not([class]),
+    .mode-toggle button[class=""],
+    .view-toggle  button:not([class]),
+    .view-toggle  button[class=""] {
+      background: #012d75; border-color: #012d75; color: #fff;
+    }
+    .mode-toggle button:not([class]):hover,
+    .mode-toggle button[class=""]:hover,
+    .view-toggle  button:not([class]):hover,
+    .view-toggle  button[class=""]:hover { background: #01245e; border-color: #01245e; }
+    #log-form { max-width: 480px; }
+    #log-form label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 0; margin-bottom: 0.3rem; }
+    #log-form input, #log-form select, #log-form textarea { width: 100%; margin-top: 0; margin-bottom: 1rem; }
+    /* Multi-entry */
+    #multi-section { overflow-x: auto; }
+    .multi-table { width: 100%; font-size: 0.88rem; white-space: nowrap; }
+    .multi-table th { font-size: 0.8rem; font-weight: 600; }
+    .multi-table td { vertical-align: middle; }
+    .multi-table input, .multi-table select { margin: 0; padding: 0.3rem 0.5rem; font-size: 0.85rem; }
+    .multi-table .col-date  { min-width: 140px; }
+    .multi-table .col-proj  { min-width: 170px; }
+    .multi-table .col-hours { min-width: 80px; }
+    .multi-table .col-task  { min-width: 120px; }
+    .multi-table .col-desc  { min-width: 200px; white-space: normal; }
+    .multi-table .col-desc input { min-width: 180px; }
+    .multi-table .col-rm    { width: 36px; }
+    .multi-table .btn-rm    { padding: 0.25rem 0.55rem; font-size: 0.85rem; margin: 0; width: auto; }
+    .multi-actions { display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; flex-wrap: wrap; }
+    .multi-actions button { width: auto; margin: 0; }
+    /* Paste */
+    #paste-section { max-width: 680px; }
+    #paste-section label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 0; margin-bottom: 0.3rem; }
+    #paste-section select { width: 100%; margin-top: 0; margin-bottom: 1rem; max-width: 480px; }
+    #paste-section textarea { width: 100%; margin-top: 0; margin-bottom: 0.5rem; font-family: monospace; font-size: 0.8rem; }
+    .paste-actions { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+    .paste-actions button { width: auto; margin: 0; }
+    #preview-wrap { margin-top: 1rem; }
+    .preview-table { font-size: 0.85rem; width: 100%; }
+    .preview-table th, .preview-table td { white-space: normal; vertical-align: top; }
+    .preview-table .col-date  { white-space: nowrap; width: 110px; }
+    .preview-table .col-task  { white-space: nowrap; }
+    .preview-table .col-hours { text-align: right; width: 60px; }
+    .verify-ok   { color: #2e7d32; font-size: 0.85rem; margin: 0.5rem 0 1rem; }
+    .verify-warn { color: #e65100; font-size: 0.85rem; margin: 0.5rem 0 1rem; }
+    #paste-save-wrap button { width: auto; }
+    /* Success */
+    .success-box { max-width: 480px; border: 1px solid #2e7d32; border-radius: var(--pico-border-radius); padding: 1.5rem; }
+    .success-box p { color: #2e7d32; margin-bottom: 1rem; font-weight: 600; }
+    .success-actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .success-actions button { width: auto; margin: 0; }
+
+    /* ── My Entries ──────────────────────────────────────── */
+    .controls { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .controls label { font-size: 0.85rem; font-weight: 600; margin: 0; }
+    .controls input[type="month"] { width: auto; margin: 0; }
+    .actions-cell { display: flex; gap: 0.4rem; }
+    .actions-cell button { font-size: 0.8rem; padding: 0.25rem 0.7rem; margin: 0; width: auto; }
+    #ent-status { min-height: 1.2rem; font-size: 0.85rem; }
+
+    /* ── Visualize ───────────────────────────────────────── */
+    .viz-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1.2rem; margin-bottom: 0.75rem; }
+    .viz-controls .ctrl { display: flex; flex-direction: column; gap: 0.25rem; }
+    .viz-controls label { font-size: 0.8rem; font-weight: 600; color: var(--pico-muted-color); margin: 0; }
+    .viz-controls select { margin: 0; width: auto; min-width: 140px; }
+    .ctrl-month-row { display: flex; align-items: center; gap: 0.4rem; }
+    .ctrl-month-row select { margin: 0; }
+    .table-toolbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--pico-table-border-color, #ddd);
+      border-bottom: none;
+      border-radius: var(--pico-border-radius) var(--pico-border-radius) 0 0;
+      background: var(--pico-card-background-color, #f9f9f9);
+    }
+    .view-toggle { display: flex; gap: 0; }
+    .view-toggle button, #viz-btn-export {
+      margin: 0; width: auto; padding: 0.35rem 0.85rem; font-size: 0.85rem; line-height: 1.4;
+    }
+    .view-toggle button { border-radius: 0; }
+    .view-toggle button:first-child { border-radius: var(--pico-border-radius) 0 0 var(--pico-border-radius); }
+    .view-toggle button:last-child  { border-radius: 0 var(--pico-border-radius) var(--pico-border-radius) 0; }
+    #viz-status { min-height: 1.2rem; font-size: 0.85rem; margin-bottom: 0.5rem; }
+
+    /* ── Admin ───────────────────────────────────────────── */
+    .tag {
+      display: inline-block; background: #1a4da0; color: #fff;
+      border-radius: 3px; padding: 0 0.4rem; font-size: 0.78rem; margin: 1px; white-space: nowrap;
+    }
+    .adm-actions { display: flex; gap: 0.4rem; }
+    .adm-actions button { font-size: 0.8rem; padding: 0.25rem 0.7rem; margin: 0; width: auto; }
+    #adm-status { min-height: 1.2rem; font-size: 0.85rem; }
+
+    /* ── Modals ──────────────────────────────────────────── */
+    dialog {
+      max-width: 520px; width: 100%;
+      border-radius: var(--pico-border-radius);
+      padding: 2rem;
+      flex-direction: column;
+    }
+    dialog h2 { margin-top: 0; margin-bottom: 1.5rem; font-size: 1.2rem; }
+    dialog .field { margin-top: 0; margin-bottom: 1.2rem; }
+    dialog label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 0; margin-bottom: 0.3rem; }
+    dialog input, dialog select, dialog textarea { width: 100%; margin-top: 0; margin-bottom: 0; }
+    dialog textarea { resize: vertical; }
+    dialog .hint { font-size: 0.78rem; color: var(--pico-muted-color); margin-top: 0.25rem; margin-bottom: 0; }
+    dialog .modal-footer { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem; }
+    dialog .modal-footer button { width: auto; margin: 0; }
+    .modal-error { color: var(--pico-del-color, #c62828); font-size: 0.85rem; min-height: 1.2rem; margin: 0; }
+    #project-modal { max-width: 560px; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.2rem; }
+    .row-2 > .field { align-self: start; margin-bottom: 0; }
+    @media (max-width: 480px) {
+      dialog { padding: 1.25rem; }
+      .row-2 { grid-template-columns: 1fr; }
+      .pf-nav-logo { margin-right: 1rem; height: 26px; }
+      .pf-nav-inner { padding: 0 1rem; }
+      .pf-nav-links button { padding: 0 0.6rem; font-size: 0.82rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Navbar ────────────────────────────────────────────── -->
+  <nav class="pf-nav" id="pf-nav" hidden>
+    <div class="pf-nav-inner">
+      <img src="assets/img/logo_v2_full_white.png" alt="Polar Flows" class="pf-nav-logo">
+      <div class="pf-nav-links">
+        <button id="nav-log">Log Time</button>
+        <button id="nav-entries">My Entries</button>
+        <button id="nav-visualize">Visualize</button>
+        <button id="nav-admin" hidden>Projects</button>
+      </div>
+      <div class="pf-nav-user">
+        <span id="nav-username"></span>
+        <button id="nav-logout">Sign out</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Bootstrap loading ─────────────────────────────────── -->
+  <div id="app-loading" class="container">
+    <p aria-busy="true">Loading...</p>
+  </div>
+
+  <!-- ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝ -->
+  <!-- SECTION: Log Time                                       -->
+  <!-- ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝ -->
+  <div id="section-log" class="pf-section" hidden>
+    <hgroup>
+      <h2>Log Time</h2>
+    </hgroup>
+
+    <p id="log-no-projects" class="error" hidden>
+      No projects are assigned to your account. Ask an admin to add you to a project first.
+    </p>
+
+    <div id="log-ui" hidden>
+      <div class="mode-toggle">
+        <button id="btn-mode-single">Single entry</button>
+        <button id="btn-mode-multi"  class="secondary outline">Multiple entries</button>
+        <button id="btn-mode-paste"  class="secondary outline">Paste from ServiceNow</button>
+      </div>
+
+      <!-- Single entry form -->
+      <form id="log-form" hidden novalidate>
+        <label for="lf-date">Date</label>
+        <input id="lf-date" type="date" required>
+        <label for="lf-project">Project</label>
+        <select id="lf-project" required><option value="">Select a project...</option></select>
+        <label for="lf-hours">Hours</label>
+        <input id="lf-hours" type="number" step="0.5" min="0.5" max="24" placeholder="e.g. 7.5" required>
+        <div id="lf-task-wrap" hidden>
+          <label for="lf-task">Task ID</label>
+          <input id="lf-task" type="text" placeholder="Enter task ID">
+        </div>
+        <label for="lf-desc">Description <small style="font-weight:normal;color:var(--pico-muted-color)">— optional</small></label>
+        <textarea id="lf-desc" rows="3" placeholder="Optional notes"></textarea>
+        <p id="log-form-error" class="error"></p>
+        <button type="submit" id="log-btn-save">Save entry</button>
+      </form>
+
+      <!-- Multiple entries -->
+      <div id="multi-section" hidden>
+        <table class="multi-table">
+          <thead>
+            <tr>
+              <th class="col-date">Date</th>
+              <th class="col-proj">Project</th>
+              <th class="col-hours">Hours</th>
+              <th class="col-task">Task ID <small style="font-weight:normal;color:var(--pico-muted-color)">optional</small></th>
+              <th class="col-desc">Description <small style="font-weight:normal;color:var(--pico-muted-color)">optional</small></th>
+              <th class="col-rm"></th>
+            </tr>
+          </thead>
+          <tbody id="multi-tbody"></tbody>
+        </table>
+        <div class="multi-actions">
+          <button id="btn-add-row" type="button" class="secondary outline">+ Add row</button>
+          <button id="btn-multi-save" type="button">Save all entries</button>
+          <span id="multi-error" class="error"></span>
+        </div>
+      </div>
+
+      <!-- Paste mode -->
+      <div id="paste-section" hidden>
+        <label for="pp-project">Project</label>
+        <select id="pp-project"><option value="">Select a project...</option></select>
+        <label for="pp-paste">Paste your weekly timesheet from ServiceNow</label>
+        <textarea id="pp-paste" rows="10" placeholder="Copy from the customer portal and paste here..."></textarea>
+        <div class="paste-actions">
+          <button id="btn-parse" type="button">Parse entries</button>
+          <span id="parse-error" class="error"></span>
+        </div>
+        <div id="preview-wrap" hidden>
+          <table class="preview-table">
+            <thead><tr>
+              <th class="col-date">Date</th>
+              <th class="col-task">Task ID</th>
+              <th class="col-hours">Hours</th>
+              <th>Description</th>
+            </tr></thead>
+            <tbody id="preview-tbody"></tbody>
+          </table>
+          <p id="verify-line"></p>
+          <div id="paste-save-wrap">
+            <button id="btn-paste-save" type="button">Save all entries</button>
+            <p id="paste-save-error" class="error"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Success -->
+      <div id="log-success" hidden>
+        <div class="success-box">
+          <p id="log-success-msg">Entry saved.</p>
+          <div class="success-actions">
+            <button id="log-btn-another">Log another</button>
+            <a href="#" id="log-go-entries">View my entries &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝ -->
+  <!-- SECTION: My Entries                                     -->
+  <!-- ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝ -->
+  <div id="section-entries" class="pf-section" hidden>
+    <hgroup>
+      <h2>My Entries</h2>
+    </hgroup>
+    <div id="ent-loading"><p aria-busy="true">Loading...</p></div>
+    <div id="ent-main" hidden>
+      <div class="controls">
+        <label for="ent-month">Month</label>
+        <button class="btn-month-nav secondary outline" id="ent-prev-month" title="Previous month">&larr;</button>
+        <input id="ent-month" type="month">
+        <button class="btn-month-nav secondary outline" id="ent-next-month" title="Next month">&rarr;</button>
+        <label for="ent-project" style="margin-left:0.75rem">Project</label>
+        <select id="ent-project" style="width:auto;margin:0;min-width:160px">
+          <option value="all">All projects</option>
+        </select>
+      </div>
+      <p id="ent-status"></p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-date">Date</th>
+              <th class="col-project">Project</th>
+              <th>Billable</th>
+              <th class="col-hours">Hours</th>
+              <th>Task ID</th>
+              <th class="col-notes">Description</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ent-tbody"></tbody>
+          <tfoot id="ent-tfoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝ -->
+  <!-- SECTION: Visualize                                      -->
+  <!-- ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝ -->
+  <div id="section-visualize" class="pf-section" hidden>
+    <hgroup>
+      <h2>Visualize</h2>
+    </hgroup>
+    <div id="viz-loading"><p aria-busy="true">Loading...</p></div>
+    <div id="viz-main" hidden>
+      <div class="viz-controls">
+        <div class="ctrl" id="viz-scope-ctrl" hidden>
+          <label for="viz-scope">Scope</label>
+          <select id="viz-scope"></select>
+        </div>
+        <div class="ctrl">
+          <label for="viz-month">Month</label>
+          <div class="ctrl-month-row">
+            <button class="btn-month-nav secondary outline" id="viz-prev-month" title="Previous month">&larr;</button>
+            <select id="viz-month"><option value="all">All time</option></select>
+            <button class="btn-month-nav secondary outline" id="viz-next-month" title="Next month">&rarr;</button>
+          </div>
+        </div>
+        <div class="ctrl">
+          <label for="viz-project">Project</label>
+          <select id="viz-project"><option value="all">All projects</option></select>
+        </div>
+      </div>
+      <p id="viz-status"></p>
+      <div class="table-toolbar">
+        <div class="view-toggle">
+          <button id="viz-btn-detailed">Detailed</button>
+          <button id="viz-btn-summary-project" class="secondary outline">Summary (Tasks)</button>
+          <button id="viz-btn-summary-day" class="secondary outline">Summary (Days)</button>
+        </div>
+        <button id="viz-btn-export" class="secondary outline">Export CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead id="viz-thead"></thead>
+          <tbody id="viz-tbody"></tbody>
+          <tfoot id="viz-tfoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝ -->
+  <!-- SECTION: Projects                                -->
+  <!-- ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝ -->
+  <div id="section-admin" class="pf-section" hidden>
+    <hgroup>
+      <h2>Projects</h2>
+      <p>Manage clients and project configuration</p>
+    </hgroup>
+    <div id="adm-loading"><p aria-busy="true">Checking access...</p></div>
+    <div id="adm-denied" hidden><p class="error">Access denied — admin only.</p></div>
+    <div id="adm-main" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:1rem">
+        <p id="adm-status"></p>
+        <button id="adm-btn-add" style="width:auto">+ Add project</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-project">Name</th>
+              <th>Billable</th>
+              <th>Period</th>
+              <th>Requires task ID</th>
+              <th class="col-tags">Predefined task IDs</th>
+              <th class="col-tags">Allowed consultants</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="adm-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Edit Entry Modal ───────────────────────────────────── -->
+  <dialog id="edit-modal">
+    <h2>Edit entry</h2>
+    <div class="field"><label for="e-date">Date</label><input id="e-date" type="date" required></div>
+    <div class="field"><label for="e-project">Project</label><select id="e-project" required></select></div>
+    <div class="field"><label for="e-hours">Hours</label><input id="e-hours" type="number" step="0.5" min="0.5" max="24" required></div>
+    <div class="field" id="e-task-wrap" hidden>
+      <label for="e-task">Task ID</label>
+      <input id="e-task" type="text" placeholder="Enter task ID">
+    </div>
+    <div class="field">
+      <label for="e-desc">Description <small style="font-weight:normal;color:var(--pico-muted-color)">— optional</small></label>
+      <textarea id="e-desc" rows="3"></textarea>
+    </div>
+    <p id="edit-modal-error" class="modal-error"></p>
+    <div class="modal-footer">
+      <button id="edit-cancel" class="secondary outline">Cancel</button>
+      <button id="edit-save">Save changes</button>
+    </div>
+  </dialog>
+
+  <!-- ── Project Modal (Admin) ──────────────────────────────── -->
+  <dialog id="project-modal">
+    <h2 id="proj-modal-title">Add project</h2>
+    <div class="field">
+      <label for="pm-name">Project name <span style="color:red">*</span></label>
+      <input id="pm-name" type="text" placeholder="e.g. Client ABC - Development">
+    </div>
+    <div class="field">
+      <label>Project ID</label>
+      <input id="pm-id" type="text" disabled style="color:var(--pico-muted-color)">
+      <p class="hint">Auto-generated from the name. Cannot be changed after creation.</p>
+    </div>
+    <div class="row-2">
+      <div class="field">
+        <label for="pm-billable">Billable</label>
+        <select id="pm-billable"><option value="true">Yes - billable</option><option value="false">No - non-billable</option></select>
+      </div>
+      <div class="field">
+        <label for="pm-requires-task">Requires task ID</label>
+        <select id="pm-requires-task"><option value="false">No</option><option value="true">Yes</option></select>
+      </div>
+    </div>
+    <div class="row-2">
+      <div class="field"><label for="pm-start">Start date</label><input id="pm-start" type="date"><p class="hint">Optional. Display only.</p></div>
+      <div class="field"><label for="pm-end">End date</label><input id="pm-end" type="date"><p class="hint">Optional. Display only.</p></div>
+    </div>
+    <div class="field">
+      <label for="pm-task-ids">Predefined task IDs</label>
+      <input id="pm-task-ids" type="text" placeholder="DEV-001, MEET-001">
+      <p class="hint">Comma-separated. Leave empty for free-text entry.</p>
+    </div>
+    <div class="field">
+      <label for="pm-consultants">Allowed consultants</label>
+      <input id="pm-consultants" type="text" placeholder="alice@company.com, bob@company.com">
+      <p class="hint">Comma-separated email addresses.</p>
+    </div>
+    <div class="modal-footer">
+      <button id="pm-cancel" class="secondary outline">Cancel</button>
+      <button id="pm-save">Save project</button>
+    </div>
+  </dialog>
+
+  <script type="module">
+    import { handleRedirectAndGetAccount, getCurrentUser, logout } from './auth.js';
+    import { adminRead, adminWrite, dataRead, dataWrite, dataList, canWriteAdmin } from './storage.js';
+
+    (async () => {
+
+    // ── Shared state ──────────────────────────────────────────
+    let user        = null;
+    let allProjects = [];
+    let myProjects  = [];
+    let projectMap  = {};
+    let isAdmin     = false;
+    const inited    = {};
+    const SECTIONS  = ['log', 'entries', 'visualize', 'admin'];
+
+    // ── Boot ─────────────────────────────────────────────────
+    try {
+      const account = await handleRedirectAndGetAccount();
+      if (!account) { window.location.href = 'index.html'; return; }
+      user = await getCurrentUser();
+      const [projects, adminFlag] = await Promise.all([
+        adminRead('projects.json').catch(() => []),
+        canWriteAdmin().catch(() => false),
+      ]);
+      allProjects = Array.isArray(projects) ? projects : [];
+      myProjects  = allProjects.filter(p =>
+        (p.allowedConsultants || []).map(e => e.toLowerCase()).includes(user.email.toLowerCase())
+      );
+      projectMap  = Object.fromEntries(allProjects.map(p => [p.id, p]));
+      isAdmin     = adminFlag;
+    } catch (err) {
+      document.getElementById('app-loading').innerHTML = `<p class="error">Error: ${esc(err.message)}</p>`;
+      throw err;
+    }
+
+    // Reveal UI
+    document.getElementById('app-loading').hidden = true;
+    const pfNav = document.getElementById('pf-nav');
+    pfNav.hidden = false;
+    document.getElementById('nav-username').textContent = user.email.split('@')[0];
+    if (isAdmin) document.getElementById('nav-admin').hidden = false;
+    document.getElementById('nav-logout').addEventListener('click', () => logout());
+
+    // ── Navigation ────────────────────────────────────────────
+    SECTIONS.forEach(name => {
+      document.getElementById(`nav-${name}`)?.addEventListener('click', () => navigate(name));
+    });
+    document.getElementById('log-go-entries').addEventListener('click', e => {
+      e.preventDefault(); navigate('entries');
+    });
+
+    function navigate(name) {
+      if (!SECTIONS.includes(name)) name = 'log';
+      window.location.hash = name;
+      SECTIONS.forEach(s => {
+        document.getElementById(`section-${s}`).hidden = s !== name;
+        document.getElementById(`nav-${s}`)?.classList.toggle('active', s === name);
+      });
+      if (!inited[name]) {
+        inited[name] = true;
+        ({ log: initLog, entries: initEntries, visualize: initVisualize, admin: initAdmin })[name]?.();
+      }
+    }
+
+    const initHash = window.location.hash.slice(1);
+    navigate(SECTIONS.includes(initHash) ? initHash : 'log');
+    window.addEventListener('hashchange', () => {
+      const h = window.location.hash.slice(1);
+      if (SECTIONS.includes(h)) navigate(h);
+    });
+
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    // LOG TIME
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    function initLog() {
+      if (!myProjects.length) {
+        document.getElementById('log-no-projects').hidden = false;
+        return;
+      }
+      const projOpts = myProjects.map(p =>
+        `<option value="${esc(p.id)}">${esc(p.name + (p.billable ? '' : ' (non-billable)'))}</option>`
+      ).join('');
+      document.getElementById('lf-project').innerHTML  += projOpts;
+      document.getElementById('pp-project').innerHTML  += projOpts;
+      document.getElementById('lf-date').value = todayISO();
+
+      const logUI    = document.getElementById('log-ui');
+      const logForm  = document.getElementById('log-form');
+      const multiSec = document.getElementById('multi-section');
+      const pasteSec = document.getElementById('paste-section');
+      const logSucc  = document.getElementById('log-success');
+      const multiTb  = document.getElementById('multi-tbody');
+      logUI.hidden = false;
+      let logMode = 'multi';
+
+      // Mode toggle
+      function setLogMode(mode) {
+        logMode = mode;
+        logForm.hidden  = mode !== 'single';
+        multiSec.hidden = mode !== 'multi';
+        pasteSec.hidden = mode !== 'paste';
+        logSucc.hidden  = true;
+        document.getElementById('btn-mode-single').className = mode === 'single' ? '' : 'secondary outline';
+        document.getElementById('btn-mode-multi').className  = mode === 'multi'  ? '' : 'secondary outline';
+        document.getElementById('btn-mode-paste').className  = mode === 'paste'  ? '' : 'secondary outline';
+        if (mode === 'multi' && !multiTb.children.length) addMultiRow(todayISO());
+      }
+      document.getElementById('btn-mode-single').addEventListener('click', () => setLogMode('single'));
+      document.getElementById('btn-mode-multi').addEventListener('click',  () => setLogMode('multi'));
+      document.getElementById('btn-mode-paste').addEventListener('click',  () => setLogMode('paste'));
+      setLogMode('multi');
+
+      // ── Single entry ──
+      const lfProject = document.getElementById('lf-project');
+      lfProject.addEventListener('change', renderLogTaskField);
+      renderLogTaskField();
+
+      logForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const errEl     = document.getElementById('log-form-error');
+        errEl.textContent = '';
+        const projectId = lfProject.value;
+        const project   = myProjects.find(p => p.id === projectId);
+        const date      = document.getElementById('lf-date').value;
+        const hours     = parseFloat(document.getElementById('lf-hours').value);
+        const taskEl    = document.getElementById('lf-task');
+        const taskId    = taskEl ? taskEl.value.trim() || null : null;
+        const desc      = document.getElementById('lf-desc').value.trim() || null;
+        if (!projectId)                            { errEl.textContent = 'Please select a project.'; return; }
+        if (!date)                                 { errEl.textContent = 'Please enter a date.'; return; }
+        if (isNaN(hours))                          { errEl.textContent = 'Please enter valid hours.'; return; }
+        if (project?.requiresTaskId && !taskId)    { errEl.textContent = 'Task ID is required.'; return; }
+        const btn = document.getElementById('log-btn-save');
+        btn.setAttribute('aria-busy', 'true'); btn.disabled = true;
+        try {
+          await saveEntries([{ id: crypto.randomUUID(), date, projectId, hours, taskId, description: desc }]);
+          document.getElementById('log-success-msg').textContent = 'Entry saved.';
+          logForm.hidden = true; logSucc.hidden = false;
+        } catch (err) {
+          errEl.textContent = 'Failed to save: ' + err.message;
+        } finally { btn.removeAttribute('aria-busy'); btn.disabled = false; }
+      });
+
+      function renderLogTaskField() {
+        const project = myProjects.find(p => p.id === lfProject.value);
+        const wrap    = document.getElementById('lf-task-wrap');
+        if (!project?.requiresTaskId) { wrap.hidden = true; return; }
+        wrap.hidden = false;
+        const existing = document.getElementById('lf-task');
+        if (project.taskIds?.length) {
+          if (existing.tagName !== 'SELECT') {
+            const sel = document.createElement('select'); sel.id = 'lf-task';
+            wrap.replaceChild(sel, existing);
+          }
+          document.getElementById('lf-task').innerHTML =
+            '<option value="">Select task ID...</option>' +
+            project.taskIds.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+        } else {
+          if (existing.tagName !== 'INPUT') {
+            const inp = document.createElement('input');
+            inp.type = 'text'; inp.id = 'lf-task'; inp.placeholder = 'Enter task ID';
+            wrap.replaceChild(inp, existing);
+          }
+        }
+      }
+
+      // ── Multi entry ──
+      function buildProjectOpts() {
+        return myProjects.map(p =>
+          `<option value="${esc(p.id)}">${esc(p.name + (p.billable ? '' : ' (non-billable)'))}</option>`
+        ).join('');
+      }
+      function addMultiRow(date) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="col-date"><input type="date" class="m-date" value="${esc(date)}"></td>
+          <td class="col-proj"><select class="m-project"><option value="">Select...</option>${buildProjectOpts()}</select></td>
+          <td class="col-hours"><input type="number" class="m-hours" step="0.5" min="0.5" max="24" placeholder="hrs"></td>
+          <td class="col-task"><input type="text" class="m-task" placeholder="optional"></td>
+          <td class="col-desc"><input type="text" class="m-desc" placeholder="optional"></td>
+          <td class="col-rm"><button type="button" class="btn-rm contrast outline">&times;</button></td>`;
+        tr.querySelector('.btn-rm').addEventListener('click', () => { if (multiTb.children.length > 1) tr.remove(); });
+        multiTb.appendChild(tr);
+      }
+      document.getElementById('btn-add-row').addEventListener('click', () => {
+        const rows = multiTb.querySelectorAll('tr');
+        addMultiRow(rows.length ? rows[rows.length-1].querySelector('.m-date').value || todayISO() : todayISO());
+      });
+      document.getElementById('btn-multi-save').addEventListener('click', async () => {
+        const errEl  = document.getElementById('multi-error');
+        errEl.textContent = '';
+        const rows   = [...multiTb.querySelectorAll('tr')];
+        const entries = [];
+        for (let i = 0; i < rows.length; i++) {
+          const row  = rows[i];
+          const date   = row.querySelector('.m-date').value;
+          const projId = row.querySelector('.m-project').value;
+          const hours  = parseFloat(row.querySelector('.m-hours').value);
+          const taskId = row.querySelector('.m-task').value.trim() || null;
+          const desc   = row.querySelector('.m-desc').value.trim() || null;
+          const proj   = myProjects.find(p => p.id === projId);
+          if (!date)                          { errEl.textContent = `Row ${i+1}: enter a date.`; return; }
+          if (!projId)                        { errEl.textContent = `Row ${i+1}: select a project.`; return; }
+          if (isNaN(hours))                   { errEl.textContent = `Row ${i+1}: enter valid hours.`; return; }
+          if (proj?.requiresTaskId && !taskId){ errEl.textContent = `Row ${i+1}: task ID required.`; return; }
+          entries.push({ id: crypto.randomUUID(), date, projectId: projId, hours, taskId, description: desc });
+        }
+        const btn = document.getElementById('btn-multi-save');
+        btn.setAttribute('aria-busy', 'true'); btn.disabled = true;
+        try {
+          await saveEntries(entries);
+          document.getElementById('log-success-msg').textContent = `${entries.length} ${entries.length===1?'entry':'entries'} saved.`;
+          multiSec.hidden = true; logSucc.hidden = false;
+        } catch (err) { errEl.textContent = 'Failed to save: ' + err.message;
+        } finally { btn.removeAttribute('aria-busy'); btn.disabled = false; }
+      });
+
+      // ── Paste mode ──
+      let parsedEntries = [];
+      document.getElementById('pp-paste').addEventListener('paste', () => setTimeout(tryParse, 50));
+      document.getElementById('btn-parse').addEventListener('click', tryParse);
+      function tryParse() {
+        const raw   = document.getElementById('pp-paste').value;
+        const errEl = document.getElementById('parse-error');
+        errEl.textContent = '';
+        document.getElementById('preview-wrap').hidden = true;
+        parsedEntries = [];
+        if (!raw.trim()) return;
+        const result = parseTimesheet(raw);
+        if (result.parseError) { errEl.textContent = result.parseError; return; }
+        if (!result.entries.length) { errEl.textContent = 'No non-zero entries found.'; return; }
+        parsedEntries = result.entries;
+        renderPreview(result.entries, result.expectedTotal);
+      }
+      function renderPreview(entries, expectedTotal) {
+        document.getElementById('preview-tbody').innerHTML = entries.map(e => `
+          <tr>
+            <td class="col-date">${esc(e.date)}</td>
+            <td class="col-task">${esc(e.taskId || '-')}</td>
+            <td class="col-hours">${e.hours}</td>
+            <td>${esc(e.description || '')}</td>
+          </tr>`).join('');
+        const total   = entries.reduce((s, e) => s + e.hours, 0);
+        const verifyEl = document.getElementById('verify-line');
+        let msg = `${entries.length} entries · ${total}h total`;
+        if (expectedTotal !== null) {
+          verifyEl.className = total === expectedTotal ? 'verify-ok' : 'verify-warn';
+          msg += total === expectedTotal ? ` · Expected ${expectedTotal}h ✓` : ` · Expected ${expectedTotal}h ⚠ totals do not match`;
+        } else { verifyEl.className = ''; }
+        verifyEl.textContent = msg;
+        document.getElementById('paste-save-error').textContent = '';
+        document.getElementById('preview-wrap').hidden = false;
+      }
+      document.getElementById('btn-paste-save').addEventListener('click', async () => {
+        const projectId = document.getElementById('pp-project').value;
+        if (!projectId) { document.getElementById('parse-error').textContent = 'Please select a project first.'; return; }
+        if (!parsedEntries.length) return;
+        const btn = document.getElementById('btn-paste-save');
+        btn.setAttribute('aria-busy', 'true'); btn.disabled = true;
+        document.getElementById('paste-save-error').textContent = '';
+        try {
+          const count = parsedEntries.length;
+          await saveEntries(parsedEntries.map(e => ({ ...e, projectId })));
+          document.getElementById('log-success-msg').textContent = `${count} entries saved.`;
+          pasteSec.hidden = true; logSucc.hidden = false;
+        } catch (err) {
+          document.getElementById('paste-save-error').textContent = 'Failed to save: ' + err.message;
+        } finally { btn.removeAttribute('aria-busy'); btn.disabled = false; }
+      });
+
+      // Log another
+      document.getElementById('log-btn-another').addEventListener('click', () => {
+        logSucc.hidden = true;
+        if (logMode === 'single') {
+          logForm.reset();
+          document.getElementById('lf-date').value = todayISO();
+          renderLogTaskField();
+          document.getElementById('log-form-error').textContent = '';
+          logForm.hidden = false;
+        } else if (logMode === 'multi') {
+          multiTb.innerHTML = '';
+          addMultiRow(todayISO());
+          document.getElementById('multi-error').textContent = '';
+          multiSec.hidden = false;
+        } else {
+          document.getElementById('pp-paste').value = '';
+          document.getElementById('parse-error').textContent = '';
+          document.getElementById('preview-wrap').hidden = true;
+          parsedEntries = [];
+          pasteSec.hidden = false;
+        }
+      });
+    }
+
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    // MY ENTRIES
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    function initEntries() {
+      document.getElementById('ent-loading').hidden = true;
+      document.getElementById('ent-main').hidden    = false;
+      const tbody      = document.getElementById('ent-tbody');
+      const tfoot      = document.getElementById('ent-tfoot');
+      const statusEl   = document.getElementById('ent-status');
+      const modal      = document.getElementById('edit-modal');
+      const monthPicker = document.getElementById('ent-month');
+      const projFilter  = document.getElementById('ent-project');
+      monthPicker.value = currentMonthISO();
+      let entFile   = null;
+      let allLoaded = [];
+      let editId    = null;
+
+      monthPicker.addEventListener('change', loadEntries);
+      document.getElementById('ent-prev-month').addEventListener('click', () => {
+        monthPicker.value = offsetMonth(monthPicker.value, -1); loadEntries();
+      });
+      document.getElementById('ent-next-month').addEventListener('click', () => {
+        monthPicker.value = offsetMonth(monthPicker.value, 1); loadEntries();
+      });
+      projFilter.addEventListener('change', applyEntFilter);
+      loadEntries();
+
+      async function loadEntries() {
+        const period = monthPicker.value;
+        setEntStatus('Loading...', '');
+        tbody.innerHTML = ''; tfoot.innerHTML = ''; allLoaded = [];
+        try {
+          entFile = await dataRead(`entries/${user.email}/${period}.json`);
+          if (!entFile?.entries?.length) {
+            populateEntProjFilter([]); setEntStatus('', '');
+            tbody.innerHTML = '<tr><td colspan="7" class="muted">No entries for this month.</td></tr>'; return;
+          }
+          allLoaded = [...entFile.entries].sort((a,b) => a.date.localeCompare(b.date));
+          populateEntProjFilter(allLoaded);
+          applyEntFilter();
+          setEntStatus('', '');
+        } catch (err) { setEntStatus('Failed to load: ' + err.message, 'error'); }
+      }
+
+      function populateEntProjFilter(entries) {
+        const current = projFilter.value;
+        const ids = [...new Set(entries.map(e => e.projectId).filter(Boolean))];
+        projFilter.innerHTML = '<option value="all">All projects</option>' +
+          ids.map(id => `<option value="${esc(id)}">${esc(projectMap[id]?.name || id)}</option>`).join('');
+        projFilter.value = [...projFilter.options].some(o => o.value === current) ? current : 'all';
+      }
+
+      function applyEntFilter() {
+        if (!allLoaded.length) return;
+        const pid = projFilter.value;
+        const filtered = pid === 'all' ? allLoaded : allLoaded.filter(e => e.projectId === pid);
+        if (!filtered.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="muted">No entries for the selected project.</td></tr>';
+          tfoot.innerHTML = ''; return;
+        }
+        renderEntRows(filtered); renderEntTotals(filtered);
+      }
+
+      function renderEntRows(entries) {
+        tbody.innerHTML = '';
+        entries.forEach(entry => {
+          const project  = projectMap[entry.projectId];
+          const billable = project ? project.billable : null;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="col-date">${esc(entry.date)}</td>
+            <td class="col-project">${esc(project ? project.name : entry.projectId)}</td>
+            <td class="${billable===true?'billable-yes':billable===false?'billable-no':''}">
+              ${billable===true?'Yes':billable===false?'No':'<span class="muted">-</span>'}
+            </td>
+            <td class="col-hours">${entry.hours}</td>
+            <td>${entry.taskId ? esc(entry.taskId) : '<span class="muted">-</span>'}</td>
+            <td class="col-notes">${entry.description ? esc(entry.description) : '<span class="muted">-</span>'}</td>
+            <td><div class="actions-cell">
+              <button class="secondary outline btn-edit">Edit</button>
+              <button class="contrast outline btn-del">Delete</button>
+            </div></td>`;
+          tr.querySelector('.btn-edit').addEventListener('click', () => openEdit(entry.id));
+          tr.querySelector('.btn-del').addEventListener('click',  () => delEntry(entry.id));
+          tbody.appendChild(tr);
+        });
+      }
+
+      function renderEntTotals(entries) {
+        const total   = entries.reduce((s,e) => s + e.hours, 0);
+        const billable = entries.reduce((s,e) => s + (projectMap[e.projectId]?.billable ? e.hours : 0), 0);
+        tfoot.innerHTML = `<tr>
+          <td colspan="3" style="text-align:right">Totals:</td>
+          <td class="col-hours">${fmt(total)}</td>
+          <td colspan="3">
+            <span class="billable-yes">${fmt(billable)} billable</span> &nbsp;/&nbsp;
+            <span class="billable-no">${fmt(total-billable)} non-billable</span>
+          </td></tr>`;
+      }
+
+      function openEdit(id) {
+        editId = id;
+        const entry = entFile.entries.find(e => e.id === id);
+        const sel   = document.getElementById('e-project');
+        sel.innerHTML = myProjects.map(p =>
+          `<option value="${esc(p.id)}"${p.id===entry.projectId?' selected':''}>${esc(p.name+(p.billable?'':' (non-billable)'))}</option>`
+        ).join('');
+        document.getElementById('e-date').value  = entry.date;
+        document.getElementById('e-hours').value = entry.hours;
+        document.getElementById('e-desc').value  = entry.description || '';
+        document.getElementById('edit-modal-error').textContent = '';
+        renderEditTaskField(entry.projectId, entry.taskId);
+        sel.onchange = () => renderEditTaskField(sel.value, null);
+        modal.showModal();
+        document.getElementById('e-date').focus();
+      }
+
+      function renderEditTaskField(projectId, currentTaskId) {
+        const project = projectMap[projectId];
+        const wrap    = document.getElementById('e-task-wrap');
+        if (!project?.requiresTaskId) { wrap.hidden = true; return; }
+        wrap.hidden = false;
+        const existing = document.getElementById('e-task');
+        if (project.taskIds?.length) {
+          if (existing.tagName !== 'SELECT') {
+            const sel = document.createElement('select'); sel.id = 'e-task';
+            wrap.replaceChild(sel, existing);
+          }
+          document.getElementById('e-task').innerHTML = '<option value="">Select task ID...</option>' +
+            project.taskIds.map(t => `<option value="${esc(t)}"${t===currentTaskId?' selected':''}>${esc(t)}</option>`).join('');
+        } else {
+          if (existing.tagName !== 'INPUT') {
+            const inp = document.createElement('input'); inp.type='text'; inp.id='e-task'; inp.placeholder='Enter task ID';
+            wrap.replaceChild(inp, existing);
+          }
+          document.getElementById('e-task').value = currentTaskId || '';
+        }
+      }
+
+      document.getElementById('edit-cancel').addEventListener('click', () => modal.close());
+      modal.addEventListener('click', e => { if (e.target === modal) modal.close(); });
+
+      document.getElementById('edit-save').addEventListener('click', async () => {
+        const errEl = document.getElementById('edit-modal-error');
+        errEl.textContent = '';
+        const date      = document.getElementById('e-date').value;
+        const projectId = document.getElementById('e-project').value;
+        const hours     = parseFloat(document.getElementById('e-hours').value);
+        const taskEl    = document.getElementById('e-task');
+        const taskId    = document.getElementById('e-task-wrap').hidden ? null : (taskEl?.value.trim() || null);
+        const desc      = document.getElementById('e-desc').value.trim() || null;
+        const project   = projectMap[projectId];
+        if (!date)                         { errEl.textContent = 'Please enter a date.'; return; }
+        if (!projectId)                    { errEl.textContent = 'Please select a project.'; return; }
+        if (isNaN(hours))                  { errEl.textContent = 'Please enter valid hours.'; return; }
+        if (project?.requiresTaskId && !taskId) { errEl.textContent = 'Task ID required.'; return; }
+        const btn = document.getElementById('edit-save');
+        btn.setAttribute('aria-busy', 'true'); btn.disabled = true;
+        try {
+          const oldPeriod = monthPicker.value;
+          const newPeriod = date.slice(0, 7);
+          const idx = entFile.entries.findIndex(e => e.id === editId);
+          if (idx === -1) throw new Error('Entry not found.');
+          if (newPeriod !== oldPeriod) {
+            entFile.entries.splice(idx, 1);
+            await dataWrite(`entries/${user.email}/${oldPeriod}.json`, entFile);
+            let tf = await dataRead(`entries/${user.email}/${newPeriod}.json`);
+            if (!tf) tf = { consultant: user.email, period: newPeriod, entries: [] };
+            tf.entries.push({ id: editId, date, projectId, hours, taskId, description: desc });
+            await dataWrite(`entries/${user.email}/${newPeriod}.json`, tf);
+          } else {
+            entFile.entries[idx] = { id: editId, date, projectId, hours, taskId, description: desc };
+            await dataWrite(`entries/${user.email}/${oldPeriod}.json`, entFile);
+          }
+          modal.close(); await loadEntries();
+        } catch (err) { errEl.textContent = 'Failed to save: ' + err.message;
+        } finally { btn.removeAttribute('aria-busy'); btn.disabled = false; }
+      });
+
+      async function delEntry(id) {
+        const entry   = entFile.entries.find(e => e.id === id);
+        const project = projectMap[entry?.projectId];
+        if (!confirm(`Delete the entry for "${project?.name || entry?.projectId}" on ${entry?.date}?`)) return;
+        setEntStatus('Deleting...', '');
+        try {
+          entFile.entries = entFile.entries.filter(e => e.id !== id);
+          await dataWrite(`entries/${user.email}/${monthPicker.value}.json`, entFile);
+          await loadEntries();
+          setEntStatus('Entry deleted.', 'success');
+          setTimeout(() => setEntStatus('', ''), 2000);
+        } catch (err) { setEntStatus('Failed to delete: ' + err.message, 'error'); }
+      }
+
+      function setEntStatus(msg, type) { statusEl.textContent = msg; statusEl.className = type || ''; }
+    }
+
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    // VISUALIZE
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    function initVisualize() {
+      document.getElementById('viz-loading').hidden = true;
+      document.getElementById('viz-main').hidden    = false;
+      document.getElementById('viz-scope-ctrl').hidden = false;
+      const thead       = document.getElementById('viz-thead');
+      const tbody       = document.getElementById('viz-tbody');
+      const tfoot       = document.getElementById('viz-tfoot');
+      const scopeSelect = document.getElementById('viz-scope');
+      const monthSelect = document.getElementById('viz-month');
+      const projSelect  = document.getElementById('viz-project');
+      let vizEntries = [];
+      let vizView    = 'detailed';
+
+      scopeSelect.addEventListener('change', vizLoad);
+      monthSelect.addEventListener('change', vizRender);
+      projSelect.addEventListener('change',  vizRender);
+      document.getElementById('viz-prev-month').addEventListener('click', () => vizNavMonth(+1));
+      document.getElementById('viz-next-month').addEventListener('click', () => vizNavMonth(-1));
+      document.getElementById('viz-btn-detailed').addEventListener('click', () => { vizView='detailed'; updateVizBtns(); vizRender(); });
+      document.getElementById('viz-btn-summary-project').addEventListener('click', () => { vizView='summary-project'; updateVizBtns(); vizRender(); });
+      document.getElementById('viz-btn-summary-day').addEventListener('click', () => { vizView='summary-day'; updateVizBtns(); vizRender(); });
+      document.getElementById('viz-btn-export').addEventListener('click', vizExport);
+      vizLoad();
+
+      async function vizLoad() {
+        vizSetStatus('Loading...', '');
+        thead.innerHTML = tbody.innerHTML = tfoot.innerHTML = '';
+        try {
+          const allPaths = await dataList('');
+          const emails   = [...new Set(allPaths.map(p => p.split('/')[1]))].sort();
+          populateVizScope(emails);
+          const scope    = scopeSelect.value;
+          const paths    = scope === 'all' ? allPaths : allPaths.filter(p => p.split('/')[1] === scope);
+          const files    = await Promise.all(paths.map(p => dataRead(p)));
+          vizEntries = [];
+          files.forEach(file => {
+            if (!file?.entries) return;
+            file.entries.forEach(entry => {
+              const project = projectMap[entry.projectId];
+              vizEntries.push({ date: entry.date, consultant: file.consultant,
+                projectName: project ? project.name : entry.projectId,
+                billable: project ? project.billable : null,
+                taskId: entry.taskId || null, hours: entry.hours, description: entry.description || null });
+            });
+          });
+          vizEntries.sort((a,b) => a.date.localeCompare(b.date));
+          populateVizMonths(); populateVizProjects();
+          vizSetStatus('', ''); vizRender();
+        } catch (err) { vizSetStatus('Failed to load: ' + err.message, 'error'); }
+      }
+
+      function populateVizScope(emails) {
+        const current = scopeSelect.value;
+        scopeSelect.innerHTML =
+          emails.map(e => `<option value="${esc(e)}">${esc(e.split('@')[0])}</option>`).join('') +
+          '<option value="all">All consultants</option>';
+        const valid = [...scopeSelect.options].some(o => o.value === current);
+        scopeSelect.value = valid ? current : user.email;
+      }
+      function populateVizMonths() {
+        const current   = monthSelect.value;
+        const months    = [...new Set(vizEntries.map(e => e.date.slice(0,7)))].sort().reverse();
+        const thisMonth = currentMonthISO();
+        monthSelect.innerHTML = '<option value="all">All time</option>' +
+          months.map(m => `<option value="${m}">${m}</option>`).join('');
+        if (months.includes(current))        monthSelect.value = current;
+        else if (months.includes(thisMonth)) monthSelect.value = thisMonth;
+      }
+      function populateVizProjects() {
+        const current = projSelect.value;
+        const names   = [...new Set(vizEntries.map(e => e.projectName))].sort();
+        projSelect.innerHTML = '<option value="all">All projects</option>' +
+          names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+        if (names.includes(current)) projSelect.value = current;
+      }
+      function vizNavMonth(delta) {
+        const opts = [...monthSelect.options].filter(o => o.value !== 'all');
+        if (!opts.length) return;
+        const idx = opts.findIndex(o => o.value === monthSelect.value);
+        if (idx === -1) { monthSelect.value = opts[0].value; }
+        else { const n = idx+delta; if (n>=0 && n<opts.length) monthSelect.value = opts[n].value; }
+        vizRender();
+      }
+      function vizRender() {
+        const month   = monthSelect.value;
+        const project = projSelect.value;
+        const filtered = vizEntries
+          .filter(e => month   === 'all' || e.date.startsWith(month))
+          .filter(e => project === 'all' || e.projectName === project);
+        if (vizView === 'detailed')             renderVizDetailed(filtered);
+        else if (vizView === 'summary-project') renderVizSumProject(filtered);
+        else                                    renderVizSumDay(filtered);
+      }
+      function renderVizDetailed(entries) {
+        const showCon = scopeSelect.value === 'all';
+        thead.innerHTML = `<tr>
+          <th class="col-date">Date</th>
+          ${showCon ? '<th class="col-name">Consultant</th>' : ''}
+          <th class="col-name">Project</th><th>Billable</th><th>Task ID</th>
+          <th class="col-hours">Hours</th><th class="col-notes">Description</th></tr>`;
+        const cols = showCon ? 7 : 6;
+        if (!entries.length) { tbody.innerHTML=`<tr><td colspan="${cols}" class="muted">No entries.</td></tr>`; tfoot.innerHTML=''; return; }
+        tbody.innerHTML = entries.map(e => `<tr>
+          <td class="col-date">${esc(e.date)}</td>
+          ${showCon ? `<td class="col-name">${esc(e.consultant?.split('@')[0]||e.consultant)}</td>` : ''}
+          <td class="col-name">${esc(e.projectName)}</td>
+          <td class="${e.billable===true?'billable-yes':'billable-no'}">${e.billable===true?'Yes':e.billable===false?'No':'-'}</td>
+          <td>${e.taskId?esc(e.taskId):'<span class="muted">-</span>'}</td>
+          <td class="col-hours">${fmt(e.hours)}</td>
+          <td class="col-notes">${e.description?esc(e.description):'<span class="muted">-</span>'}</td></tr>`).join('');
+        vizTotals(entries, cols-1, 'col-hours');
+      }
+      function renderVizSumProject(entries) {
+        thead.innerHTML = `<tr><th>Month</th><th class="col-name">Project</th><th>Billable</th><th>Task ID</th><th class="col-hours">Hours</th></tr>`;
+        if (!entries.length) { tbody.innerHTML='<tr><td colspan="5" class="muted">No entries.</td></tr>'; tfoot.innerHTML=''; return; }
+        const groups = {};
+        entries.forEach(e => {
+          const key = `${e.date.slice(0,7)}||${e.projectName}||${e.billable}||${e.taskId||''}`;
+          if (!groups[key]) groups[key] = { month: e.date.slice(0,7), projectName: e.projectName, billable: e.billable, taskId: e.taskId, hours: 0 };
+          groups[key].hours += e.hours;
+        });
+        const rows = Object.values(groups).sort((a,b) => a.month.localeCompare(b.month)||a.projectName.localeCompare(b.projectName));
+        tbody.innerHTML = rows.map(r => `<tr>
+          <td>${esc(r.month)}</td><td class="col-name">${esc(r.projectName)}</td>
+          <td class="${r.billable===true?'billable-yes':'billable-no'}">${r.billable===true?'Yes':r.billable===false?'No':'-'}</td>
+          <td>${r.taskId?esc(r.taskId):'<span class="muted">-</span>'}</td>
+          <td class="col-hours">${fmt(r.hours)}</td></tr>`).join('');
+        vizTotals(rows, 4, 'col-hours');
+      }
+      function renderVizSumDay(entries) {
+        thead.innerHTML = `<tr><th class="col-date">Date</th><th class="col-name">Project</th><th>Billable</th><th class="col-hours">Hours</th></tr>`;
+        if (!entries.length) { tbody.innerHTML='<tr><td colspan="4" class="muted">No entries.</td></tr>'; tfoot.innerHTML=''; return; }
+        const groups = {};
+        entries.forEach(e => {
+          const key = `${e.date}||${e.projectName}`;
+          if (!groups[key]) groups[key] = { date: e.date, projectName: e.projectName, billable: e.billable, hours: 0 };
+          groups[key].hours += e.hours;
+        });
+        const rows = Object.values(groups).sort((a,b) => a.date.localeCompare(b.date)||a.projectName.localeCompare(b.projectName));
+        tbody.innerHTML = rows.map(r => `<tr>
+          <td class="col-date">${esc(r.date)}</td><td class="col-name">${esc(r.projectName)}</td>
+          <td class="${r.billable===true?'billable-yes':'billable-no'}">${r.billable===true?'Yes':r.billable===false?'No':'-'}</td>
+          <td class="col-hours">${fmt(r.hours)}</td></tr>`).join('');
+        vizTotals(rows, 3, 'col-hours');
+      }
+      function vizTotals(rows, labelCols, hoursClass) {
+        const total = rows.reduce((s,r) => s + r.hours, 0);
+        const bill  = rows.reduce((s,r) => s + (r.billable ? r.hours : 0), 0);
+        tfoot.innerHTML = `<tr>
+          <td colspan="${labelCols}" style="text-align:right">Total:</td>
+          <td class="${hoursClass}">${fmt(total)}</td></tr>
+          <tr><td colspan="${labelCols}" style="text-align:right;font-weight:normal;font-size:0.82rem;color:var(--pico-muted-color)">
+            <span class="billable-yes">${fmt(bill)}h billable</span> /
+            <span class="billable-no">${fmt(total-bill)}h non-billable</span></td><td></td></tr>`;
+      }
+      function vizExport() {
+        const month   = monthSelect.value;
+        const project = projSelect.value;
+        const scope   = scopeSelect.value;
+        const filtered = vizEntries
+          .filter(e => month==='all'||e.date.startsWith(month))
+          .filter(e => project==='all'||e.projectName===project);
+        let headers, rows;
+        if (vizView === 'detailed') {
+          headers = ['Date','Consultant','Project','Billable','Task ID','Hours','Description'];
+          rows = filtered.map(e => [e.date, e.consultant, e.projectName, e.billable===true?'Yes':e.billable===false?'No':'', e.taskId||'', e.hours, e.description||'']);
+        } else if (vizView === 'summary-project') {
+          const groups = {};
+          filtered.forEach(e => {
+            const key = `${e.date.slice(0,7)}||${e.projectName}||${e.billable}||${e.taskId||''}`;
+            if (!groups[key]) groups[key] = { month: e.date.slice(0,7), projectName: e.projectName, billable: e.billable, taskId: e.taskId, hours: 0 };
+            groups[key].hours += e.hours;
+          });
+          headers = ['Month','Project','Billable','Task ID','Hours'];
+          rows = Object.values(groups).sort((a,b) => a.month.localeCompare(b.month)).map(r => [r.month, r.projectName, r.billable===true?'Yes':r.billable===false?'No':'', r.taskId||'', r.hours]);
+        } else {
+          const groups = {};
+          filtered.forEach(e => {
+            const key = `${e.date}||${e.projectName}`;
+            if (!groups[key]) groups[key] = { date: e.date, projectName: e.projectName, billable: e.billable, hours: 0 };
+            groups[key].hours += e.hours;
+          });
+          headers = ['Date','Project','Billable','Hours'];
+          rows = Object.values(groups).sort((a,b) => a.date.localeCompare(b.date)).map(r => [r.date, r.projectName, r.billable===true?'Yes':r.billable===false?'No':'', r.hours]);
+        }
+        const csv = [headers,...rows].map(row => row.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
+        const a = Object.assign(document.createElement('a'), {
+          href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })),
+          download: `timereport-${scope}-${month}.csv`,
+        });
+        a.click(); URL.revokeObjectURL(a.href);
+      }
+      function updateVizBtns() {
+        document.getElementById('viz-btn-detailed').className        = vizView==='detailed'        ? '' : 'secondary outline';
+        document.getElementById('viz-btn-summary-project').className = vizView==='summary-project' ? '' : 'secondary outline';
+        document.getElementById('viz-btn-summary-day').className     = vizView==='summary-day'     ? '' : 'secondary outline';
+      }
+      function vizSetStatus(msg, type) {
+        const el = document.getElementById('viz-status'); el.textContent=msg; el.className=type||'';
+      }
+    }
+
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    // Projects
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    function initAdmin() {
+      document.getElementById('adm-loading').hidden = true;
+      if (!isAdmin) { document.getElementById('adm-denied').hidden = false; return; }
+      document.getElementById('adm-main').hidden = false;
+      const modal = document.getElementById('project-modal');
+      let admProjects  = [...allProjects];
+      let editingIndex = null;
+      admRenderTable();
+
+      document.getElementById('adm-btn-add').addEventListener('click', () => admOpenModal(null));
+      document.getElementById('pm-cancel').addEventListener('click', () => modal.close());
+      document.getElementById('pm-save').addEventListener('click', admSaveModal);
+      document.getElementById('pm-name').addEventListener('input', e => {
+        if (editingIndex === null) document.getElementById('pm-id').value = slugify(e.target.value);
+      });
+      modal.addEventListener('click', e => { if (e.target === modal) modal.close(); });
+
+      async function admSaveProjects() {
+        admSetStatus('Saving...');
+        try {
+          await adminWrite('projects.json', admProjects);
+          admSetStatus('Saved.', 'success');
+          setTimeout(() => admSetStatus(''), 2500);
+        } catch (e) { admSetStatus('Save failed: ' + e.message, 'error'); throw e; }
+      }
+
+      function admOpenModal(index) {
+        editingIndex = index;
+        const isNew = index === null;
+        const p = isNew ? {} : admProjects[index];
+        document.getElementById('proj-modal-title').textContent = isNew ? 'Add project' : 'Edit project';
+        document.getElementById('pm-name').value        = p.name || '';
+        document.getElementById('pm-id').value          = p.id   || '';
+        document.getElementById('pm-billable').value    = p.billable === false ? 'false' : 'true';
+        document.getElementById('pm-requires-task').value = p.requiresTaskId ? 'true' : 'false';
+        document.getElementById('pm-start').value       = p.startDate || '';
+        document.getElementById('pm-end').value         = p.endDate   || '';
+        document.getElementById('pm-task-ids').value    = (p.taskIds || []).join(', ');
+        document.getElementById('pm-consultants').value = (p.allowedConsultants || []).join(', ');
+        const idField = document.getElementById('pm-id');
+        idField.disabled = !isNew; idField.style.color = isNew ? '' : 'var(--pico-muted-color)';
+        modal.showModal(); document.getElementById('pm-name').focus();
+      }
+
+      async function admSaveModal() {
+        const name         = document.getElementById('pm-name').value.trim();
+        const billable     = document.getElementById('pm-billable').value === 'true';
+        const requiresTask = document.getElementById('pm-requires-task').value === 'true';
+        const startDate    = document.getElementById('pm-start').value || null;
+        const endDate      = document.getElementById('pm-end').value   || null;
+        const taskIds      = splitCSV(document.getElementById('pm-task-ids').value);
+        const consultants  = splitCSV(document.getElementById('pm-consultants').value);
+        if (!name) { alert('Project name is required.'); return; }
+        const isNew = editingIndex === null;
+        const id    = isNew ? slugify(name) : admProjects[editingIndex].id;
+        if (isNew && admProjects.some(p => p.id === id)) { alert(`A project with ID "${id}" already exists.`); return; }
+        const updated = { id, name, billable, requiresTaskId: requiresTask, startDate, endDate, taskIds, allowedConsultants: consultants };
+        if (isNew) admProjects.push(updated); else admProjects[editingIndex] = updated;
+        try { await admSaveProjects(); modal.close(); admRenderTable(); } catch {}
+      }
+
+      function admRenderTable() {
+        const tbody = document.getElementById('adm-tbody');
+        tbody.innerHTML = '';
+        if (!admProjects.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="muted">No projects yet. Click "+ Add project" to create one.</td></tr>'; return;
+        }
+        admProjects.forEach((p, i) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="col-project"><strong>${esc(p.name)}</strong><br><small class="muted">${esc(p.id)}</small></td>
+            <td class="${p.billable?'billable-yes':'billable-no'}">${p.billable?'Yes':'No'}</td>
+            <td>${formatPeriod(p.startDate, p.endDate)}</td>
+            <td>${p.requiresTaskId?'Yes':'<span class="muted">No</span>'}</td>
+            <td class="col-tags">${renderTags(p.taskIds)}</td>
+            <td class="col-tags">${renderTags(p.allowedConsultants)}</td>
+            <td><div class="adm-actions">
+              <button class="secondary outline btn-adm-edit">Edit</button>
+              <button class="contrast outline btn-adm-del">Delete</button>
+            </div></td>`;
+          tr.querySelector('.btn-adm-edit').addEventListener('click', () => admOpenModal(i));
+          tr.querySelector('.btn-adm-del').addEventListener('click',  () => admDelete(i));
+          tbody.appendChild(tr);
+        });
+      }
+
+      async function admDelete(i) {
+        if (!confirm(`Delete "${admProjects[i].name}"?\n\nExisting time entries are not affected.`)) return;
+        admProjects.splice(i, 1); await admSaveProjects(); admRenderTable();
+      }
+
+      function admSetStatus(msg, type = '') {
+        const el = document.getElementById('adm-status'); el.textContent = msg; el.className = type;
+      }
+      function renderTags(arr) {
+        return arr?.length ? arr.map(t => `<span class="tag">${esc(t)}</span>`).join(' ') : '<span class="muted">-</span>';
+      }
+      function formatPeriod(start, end) {
+        if (!start && !end) return '<span class="muted">-</span>';
+        return `${esc(start||'...')} &rarr; ${esc(end||'ongoing')}`;
+      }
+      function splitCSV(str) { return str.split(',').map(s => s.trim()).filter(Boolean); }
+      function slugify(str) { return str.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+    }
+
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    // SHARED HELPERS
+    // ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
+    async function saveEntries(entries) {
+      const byPeriod = {};
+      entries.forEach(entry => {
+        const period = entry.date.slice(0, 7);
+        if (!byPeriod[period]) byPeriod[period] = [];
+        byPeriod[period].push(entry);
+      });
+      await Promise.all(Object.entries(byPeriod).map(async ([period, periodEntries]) => {
+        const filePath = `entries/${user.email}/${period}.json`;
+        let file = await dataRead(filePath);
+        if (!file) file = { consultant: user.email, period, entries: [] };
+        file.entries.push(...periodEntries);
+        await dataWrite(filePath, file);
+      }));
+    }
+
+    function parseTimesheet(rawText) {
+      const lines = rawText.split('\n').map(l => l.trim());
+      const rangeLine = lines.find(l => /\w+ \d+ - \w+ \d+,\s*\d{4}/.test(l));
+      if (!rangeLine) return { parseError: 'Could not find a date range (e.g. "March 23 - March 29, 2026").' };
+      const rangeMatch = rangeLine.match(/^(\w+)\s+(\d+)\s*-\s*(\w+)\s+(\d+),\s*(\d{4})/);
+      if (!rangeMatch) return { parseError: 'Date range format not recognised.' };
+      const [, startMonth, startDay, , , year] = rangeMatch;
+      const monthIndex = new Date(`${startMonth} 1, 2000`).getMonth();
+      const startDate  = new Date(Date.UTC(parseInt(year), monthIndex, parseInt(startDay)));
+      if (isNaN(startDate)) return { parseError: `Could not parse start date: ${startMonth} ${startDay}, ${year}.` };
+      const totalLine     = lines.find(l => /Time Sheet breakdown/i.test(l));
+      const totalMatch    = totalLine && totalLine.match(/(\d+)\s+hrs?/i);
+      const expectedTotal = totalMatch ? parseInt(totalMatch[1]) : null;
+      const tableStart    = lines.findIndex(l => l === 'Logged Time Cards');
+      if (tableStart === -1) return { parseError: 'Could not find "Logged Time Cards" section.' };
+      const tokens = lines.slice(tableStart + 1 + 11).filter(l => l !== '');
+      const entries = [];
+      let i = 0;
+      while (i < tokens.length) {
+        const description = tokens[i];
+        let taskId, hoursOffset, blockSize;
+        if (i+1 < tokens.length && /^[A-Z]+\d+$/.test(tokens[i+1])) {
+          taskId=tokens[i+1]; hoursOffset=4; blockSize=12;
+        } else {
+          taskId=description; hoursOffset=3; blockSize=11;
+        }
+        if (i + blockSize > tokens.length) break;
+        for (let d = 0; d < 7; d++) {
+          const hours = parseFloat(tokens[i + hoursOffset + d]);
+          if (!isNaN(hours) && hours > 0) {
+            const date = new Date(startDate);
+            date.setUTCDate(date.getUTCDate() + d);
+            entries.push({
+              id: crypto.randomUUID(),
+              date: [date.getUTCFullYear(), String(date.getUTCMonth()+1).padStart(2,'0'), String(date.getUTCDate()).padStart(2,'0')].join('-'),
+              hours, taskId, description,
+            });
+          }
+        }
+        i += blockSize;
+      }
+      return { entries, expectedTotal };
+    }
+
+    function esc(str) {
+      return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function fmt(n)  { return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+    function todayISO()        { return new Date().toISOString().slice(0, 10); }
+    function currentMonthISO() { return new Date().toISOString().slice(0, 7); }
+    function offsetMonth(ym, delta) {
+      const [y, m] = ym.split('-').map(Number);
+      const d = new Date(y, m-1+delta, 1);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    }
+
+    })();
+  </script>
+</body>
+</html>

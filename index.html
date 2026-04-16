@@ -4,124 +4,146 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <link rel="icon" href="data:,">
+  <link rel="icon" type="image/png" href="assets/img/Polarflows-logo-favicon.png">
   <title>Time Reporting - Polar Flows</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
   <style>
-    nav ul {
+    :root {
+      --pico-primary:         #1a4da0;
+      --pico-primary-hover:   #012d75;
+      --pico-primary-focus:   rgba(26,77,160,0.25);
+      --pico-primary-inverse: #fff;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    body { background: #f8fafc !important; --pico-background-color: #f8fafc; }
+
+    /* ── Navbar ─────────────────────────────────────────────── */
+    .pf-nav {
+      background: #012d75;
+      position: sticky;
+      top: 0;
+      z-index: 1030;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+    .pf-nav-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 2.5rem;
       display: flex;
-      gap: 0.75rem;
-      list-style: none;
-      padding: 0;
-      flex-wrap: wrap;
-      margin-top: 1.5rem;
+      align-items: center;
+      height: 78px;
     }
-    nav ul li a {
-      display: inline-block;
-      padding: 0.5rem 1rem;
-      border: 1px solid var(--pico-primary);
+    .pf-nav-logo { height: 48px; flex-shrink: 0; }
+    .pf-nav-tagline {
+      margin-left: 1.5rem;
+      color: rgba(255,255,255,0.55);
+      font-size: 0.85rem;
+      font-weight: 400;
+      border-left: 1px solid rgba(255,255,255,0.2);
+      padding-left: 1.5rem;
+      white-space: nowrap;
+    }
+    @media (max-width: 480px) {
+      .pf-nav-inner { padding: 0 1rem; }
+      .pf-nav-logo { height: 32px; }
+      .pf-nav-tagline { display: none; }
+    }
+
+    /* ── Sign-in card ───────────────────────────────────────── */
+    .signin-wrap {
+      min-height: calc(100vh - 78px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.5rem;
+    }
+    .signin-card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--pico-card-background-color, #fff);
+      border: 1px solid var(--pico-card-border-color, #e0e0e0);
       border-radius: var(--pico-border-radius);
-      text-decoration: none;
+      padding: 2.5rem 2rem;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.07);
     }
-    nav ul li a:hover {
-      background: var(--pico-primary-background);
+    .signin-card h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-top: 0;
+      margin-bottom: 0.35rem;
     }
-    .user-info {
+    .signin-card .subtitle {
       color: var(--pico-muted-color);
       font-size: 0.9rem;
-      margin-bottom: 0;
+      margin-bottom: 2rem;
     }
-    .error { color: var(--pico-del-color, #c0392b); }
-    #status-msg { min-height: 1.2rem; font-size: 0.85rem; color: var(--pico-muted-color); }
+    .signin-card button { width: 100%; margin-top: 0.5rem; }
+    .ms-icon {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+    }
+    .ms-icon svg { flex-shrink: 0; }
+    .error { color: var(--pico-del-color, #c0392b); font-size: 0.9rem; }
   </style>
 </head>
 <body>
-  <main class="container">
-    <hgroup>
-      <h1>Polar Flows</h1>
-      <p>Internal Time Reporting</p>
-    </hgroup>
 
-    <!-- Loading state -->
-    <div id="view-loading">
-      <p aria-busy="true">Loading...</p>
+  <!-- ── Navbar ────────────────────────────────────────────── -->
+  <nav class="pf-nav">
+    <div class="pf-nav-inner">
+      <img src="assets/img/logo_v2_full_white.png" alt="Polar Flows" class="pf-nav-logo">
+      <span class="pf-nav-tagline">Internal Time Reporting</span>
     </div>
+  </nav>
 
-    <!-- Logged-out state -->
-    <div id="view-logged-out" hidden>
-      <p>Sign in with your Polar Flows Microsoft account to continue.</p>
-      <button id="btn-login">Sign in with Microsoft</button>
+  <!-- ── Sign-in area ──────────────────────────────────────── -->
+  <div class="signin-wrap">
+    <div class="signin-card">
+      <!-- Loading state -->
+      <div id="view-loading">
+        <p aria-busy="true">Checking session…</p>
+      </div>
+
+      <!-- Logged-out state -->
+      <div id="view-logged-out" hidden>
+        <h1>Sign in</h1>
+        <p class="subtitle">Use your Polar Flows Microsoft account to access the time reporting portal.</p>
+        <button id="btn-login">
+          <span class="ms-icon">
+            <!-- Microsoft logo -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 21 21">
+              <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+              <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+              <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+              <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+            </svg>
+            Sign in with Microsoft
+          </span>
+        </button>
+      </div>
     </div>
-
-    <!-- Logged-in state -->
-    <div id="view-logged-in" hidden>
-      <p class="user-info">
-        Signed in as <strong id="user-name"></strong>
-        &nbsp;&bull;&nbsp;
-        <span id="user-email"></span>
-      </p>
-
-      <nav aria-label="App navigation">
-        <ul>
-          <li><a href="log.html">Log Time</a></li>
-          <li><a href="my-entries.html">My Entries</a></li>
-          <li><a href="visualize.html">Visualize</a></li>
-          <li id="admin-nav" hidden><a href="admin/projects.html">Admin: Projects</a></li>
-        </ul>
-      </nav>
-
-      <p id="status-msg"></p>
-
-      <hr>
-      <small>
-        <a href="#" id="btn-logout" style="color: var(--pico-muted-color)">Sign out</a>
-      </small>
-    </div>
-  </main>
+  </div>
 
   <script type="module">
-    import { handleRedirectAndGetAccount, login, logout, getCurrentUser } from './auth.js';
-    import { canWriteAdmin } from './storage.js';
-
-    const viewLoading   = document.getElementById('view-loading');
-    const viewLoggedOut = document.getElementById('view-logged-out');
-    const viewLoggedIn  = document.getElementById('view-logged-in');
-    const statusMsg     = document.getElementById('status-msg');
+    import { handleRedirectAndGetAccount, login } from './auth.js';
 
     document.getElementById('btn-login').addEventListener('click', () => login());
-    document.getElementById('btn-logout').addEventListener('click', (e) => {
-      e.preventDefault();
-      logout();
-    });
 
     try {
       const account = await handleRedirectAndGetAccount();
-      viewLoading.hidden = true;
+      document.getElementById('view-loading').hidden = true;
 
       if (account) {
-        const user = await getCurrentUser();
-        document.getElementById('user-name').textContent = user.name;
-        document.getElementById('user-email').textContent = user.email;
-        viewLoggedIn.hidden = false;
-
-        // Check admin access asynchronously - do not block the page
-        statusMsg.textContent = 'Checking permissions...';
-        canWriteAdmin()
-          .then(isAdmin => {
-            statusMsg.textContent = '';
-            if (isAdmin) {
-              document.getElementById('admin-nav').hidden = false;
-            }
-          })
-          .catch(() => {
-            statusMsg.textContent = '';
-          });
+        window.location.href = 'app.html';
       } else {
-        viewLoggedOut.hidden = false;
+        document.getElementById('view-logged-out').hidden = false;
       }
     } catch (err) {
-      viewLoading.innerHTML = `<p class="error">Error initialising auth: ${err.message}</p>
-        <p><small>Check that <code>config.js</code> has valid clientId and tenantId values.</small></p>`;
+      document.getElementById('view-loading').innerHTML =
+        `<p class="error">Error initialising auth: ${err.message}</p>
+         <p><small>Check that <code>config.js</code> has valid clientId and tenantId values.</small></p>`;
       console.error('[timereport] auth error', err);
     }
   </script>
