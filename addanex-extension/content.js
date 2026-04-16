@@ -1,4 +1,4 @@
-// Polar Flows → Broker Portal content script
+﻿// Polar Flows -> Broker Portal content script
 // Activates on *.timesheetportal.com pages.
 // Reads clipboard data written by the "Copy for broker" button in PolarFlows
 // and fills in the daily hours inputs on the timesheet.
@@ -9,7 +9,7 @@
   // Only activate if the timesheet table is present
   if (!document.querySelector('table.tsEntry')) return;
 
-  // ── Inject button ──────────────────────────────────────────────────────────
+  // - Inject button -
   const btn = document.createElement('button');
   btn.id        = 'pf-fill-btn';
   btn.className = 'tspButton';
@@ -31,7 +31,7 @@
 
   document.body.appendChild(btn);
 
-  // ── Fill logic ─────────────────────────────────────────────────────────────
+  // - Fill logic -
   btn.addEventListener('click', async () => {
     let text;
     try {
@@ -86,16 +86,16 @@
     // Feedback
     const orig = btn.textContent;
     if (skipped > 0 && filled === 0) {
-      btn.textContent = `⚠ No matching days found — is the correct month open?`;
+      btn.textContent = `[!] No matching days found — is the correct month open?`;
     } else if (skipped > 0) {
-      btn.textContent = `Done ✓ (${filled} filled, ${skipped} skipped)`;
+      btn.textContent = `Done [ok] (${filled} filled, ${skipped} skipped)`;
     } else {
-      btn.textContent = `Done ✓ ${filled} days filled`;
+      btn.textContent = `Done [ok] ${filled} days filled`;
     }
     setTimeout(() => { btn.textContent = orig; }, 4000);
   });
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  // - Helpers -
   function toHHMM(decimal) {
     const h = Math.floor(decimal);
     const m = Math.round((decimal - h) * 60);
