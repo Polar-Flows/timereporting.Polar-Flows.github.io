@@ -179,13 +179,28 @@
       background: var(--pico-card-background-color, #f9f9f9);
     }
     .view-toggle { display: flex; gap: 0; }
-    .view-toggle button, #viz-btn-export {
+    .view-toggle button, #viz-btn-export, #viz-btn-broker {
       margin: 0; width: auto; padding: 0.35rem 0.85rem; font-size: 0.85rem; line-height: 1.4;
     }
     .view-toggle button { border-radius: 0; }
     .view-toggle button:first-child { border-radius: var(--pico-border-radius) 0 0 var(--pico-border-radius); }
     .view-toggle button:last-child  { border-radius: 0 var(--pico-border-radius) var(--pico-border-radius) 0; }
     #viz-status { min-height: 1.2rem; font-size: 0.85rem; margin-bottom: 0.5rem; }
+
+    /* ── Extension install help ─────────────────────────── */
+    .ext-help-panel {
+      display: none; position: absolute; z-index: 200;
+      background: var(--pico-card-background-color, #fff);
+      border: 1px solid var(--pico-card-border-color, #ddd);
+      border-radius: var(--pico-border-radius);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+      padding: 1rem 1.2rem;
+      max-width: 320px; font-size: 0.82rem; line-height: 1.6;
+    }
+    .ext-help-panel.open { display: block; }
+    .ext-help-panel ol { margin: 0.5rem 0 0; padding-left: 1.2rem; }
+    .ext-help-panel li { margin-bottom: 0.3rem; }
+    .ext-help-panel code { font-size: 0.78rem; background: #eef2f7; padding: 0 4px; border-radius: 3px; }
 
     /* ── Admin ───────────────────────────────────────────── */
     .tag {
@@ -422,7 +437,10 @@
           <button id="viz-btn-summary-project" class="secondary outline">Summary (Tasks)</button>
           <button id="viz-btn-summary-day" class="secondary outline">Summary (Days)</button>
         </div>
-        <button id="viz-btn-export" class="secondary outline">Export CSV</button>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <button id="viz-btn-broker" class="secondary outline" hidden>Copy for broker</button>
+          <button id="viz-btn-export" class="secondary outline">Export CSV</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table>
@@ -430,6 +448,17 @@
           <tbody id="viz-tbody"></tbody>
           <tfoot id="viz-tfoot"></tfoot>
         </table>
+      </div>
+      <div id="viz-addanex-row" hidden
+           style="display:flex;justify-content:flex-end;gap:0.5rem;align-items:center;margin-top:0.75rem;">
+        <a id="btn-dl-ext" href="assets/addanex-extension.zip" download
+           role="button"
+           style="font-size:0.78rem;padding:0.25rem 0.7rem;line-height:1.4;text-decoration:none;border-radius:var(--pico-border-radius);background:#e9ecef;color:#6c757d;border:1px solid #ced4da;">
+          &#8595; Addanex extension
+        </a>
+        <button id="btn-ext-help"
+                style="padding:0.25rem 0.55rem;font-size:0.8rem;line-height:1.4;background:#e9ecef;color:#6c757d;border:1px solid #ced4da;border-radius:var(--pico-border-radius);cursor:pointer;"
+                title="How to install the Addanex extension">?</button>
       </div>
     </div>
   </div>
@@ -1046,6 +1075,39 @@
       document.getElementById('viz-btn-summary-project').addEventListener('click', () => { vizView='summary-project'; updateVizBtns(); vizRender(); });
       document.getElementById('viz-btn-summary-day').addEventListener('click', () => { vizView='summary-day'; updateVizBtns(); vizRender(); });
       document.getElementById('viz-btn-export').addEventListener('click', vizExport);
+
+      // ── Addanex extension help panel ──
+      const extHelpPanel = document.getElementById('ext-help-panel');
+      document.getElementById('btn-ext-help').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const rect = e.currentTarget.getBoundingClientRect();
+        extHelpPanel.style.top  = (rect.bottom + window.scrollY + 6) + 'px';
+        extHelpPanel.style.left = Math.max(8, rect.right - 320 + window.scrollX) + 'px';
+        extHelpPanel.classList.toggle('open');
+      });
+      document.addEventListener('click', () => extHelpPanel.classList.remove('open'));
+
+      document.getElementById('viz-btn-broker').addEventListener('click', () => {
+        const month   = monthSelect.value;
+        const project = projSelect.value;
+        const filtered = vizEntries
+          .filter(e => month   === 'all' || e.date.startsWith(month))
+          .filter(e => project === 'all' || e.projectName === project);
+        const byDay = {};
+        for (const e of filtered) {
+          byDay[e.date] = (byDay[e.date] || 0) + e.hours;
+        }
+        const payload = Object.entries(byDay)
+          .filter(([, h]) => h > 0)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, hours]) => ({ date, hours }));
+        navigator.clipboard.writeText(JSON.stringify(payload)).then(() => {
+          const btn = document.getElementById('viz-btn-broker');
+          const orig = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = orig; }, 2000);
+        });
+      });
       vizLoad();
 
       async function vizLoad() {
@@ -1220,6 +1282,9 @@
         document.getElementById('viz-btn-detailed').className        = vizView==='detailed'        ? '' : 'secondary outline';
         document.getElementById('viz-btn-summary-project').className = vizView==='summary-project' ? '' : 'secondary outline';
         document.getElementById('viz-btn-summary-day').className     = vizView==='summary-day'     ? '' : 'secondary outline';
+        const isDaySummary = vizView === 'summary-day';
+        document.getElementById('viz-btn-broker').hidden  = !isDaySummary;
+        document.getElementById('viz-addanex-row').hidden = !isDaySummary;
       }
       function vizSetStatus(msg, type) {
         const el = document.getElementById('viz-status'); el.textContent=msg; el.className=type||'';
@@ -1411,5 +1476,17 @@
 
     })();
   </script>
+
+  <!-- ── Addanex extension install help panel ──────────────── -->
+  <div id="ext-help-panel" class="ext-help-panel">
+    <strong>Installing the Addanex extension</strong>
+    <ol>
+      <li>Click <em>&#8595; Addanex extension</em> above and unzip the downloaded file.</li>
+      <li>Open Chrome and go to <code>chrome://extensions</code></li>
+      <li>Enable <strong>Developer mode</strong> (toggle in the top-right corner).</li>
+      <li>Click <strong>Load unpacked</strong> and select the unzipped folder.</li>
+      <li>Done — the button appears automatically when you open the Addanex portal.</li>
+    </ol>
+  </div>
 </body>
 </html>

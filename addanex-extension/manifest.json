@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Polar Flows → Addanex Portal",
+  "version": "1.0",
+  "description": "Auto-fills the Addanex timesheet from PolarFlows clipboard data.",
+  "content_scripts": [
+    {
+      "matches": ["*://*.timesheetportal.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["clipboardRead"],
+  "icons": { "48": "icon.png" }
+}
