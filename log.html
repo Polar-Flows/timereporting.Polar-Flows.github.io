@@ -11,10 +11,27 @@
     .back-link { font-size: 0.9rem; margin-bottom: 1.5rem; display: block; }
 
     /* Mode toggle */
-    .mode-toggle { display: flex; gap: 0; margin-bottom: 1.5rem; max-width: 480px; }
+    .mode-toggle { display: flex; gap: 0; margin-bottom: 1.5rem; }
     .mode-toggle button { margin: 0; width: auto; flex: 1; border-radius: 0; font-size: 0.9rem; }
     .mode-toggle button:first-child { border-radius: var(--pico-border-radius) 0 0 var(--pico-border-radius); }
     .mode-toggle button:last-child  { border-radius: 0 var(--pico-border-radius) var(--pico-border-radius) 0; }
+
+    /* Multi-entry mode */
+    #multi-section { overflow-x: auto; }
+    .multi-table { width: 100%; font-size: 0.88rem; white-space: nowrap; }
+    .multi-table th { font-size: 0.8rem; font-weight: 600; }
+    .multi-table td { vertical-align: middle; }
+    .multi-table input, .multi-table select { margin: 0; padding: 0.3rem 0.5rem; font-size: 0.85rem; }
+    .multi-table .col-date  { min-width: 140px; }
+    .multi-table .col-proj  { min-width: 170px; }
+    .multi-table .col-hours { min-width: 80px; }
+    .multi-table .col-task  { min-width: 120px; }
+    .multi-table .col-desc  { min-width: 200px; white-space: normal; }
+    .multi-table .col-desc input { min-width: 180px; }
+    .multi-table .col-rm    { width: 36px; }
+    .multi-table .btn-rm    { padding: 0.25rem 0.55rem; font-size: 0.85rem; margin: 0; width: auto; }
+    .multi-actions { display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; flex-wrap: wrap; }
+    .multi-actions button { width: auto; margin: 0; }
 
     /* Single entry form */
     form { max-width: 480px; }
@@ -71,7 +88,8 @@
     <!-- Mode toggle -->
     <div class="mode-toggle" id="mode-toggle" hidden>
       <button id="btn-mode-single" type="button">Single entry</button>
-      <button id="btn-mode-paste" type="button" class="secondary outline">Paste from customer portal</button>
+      <button id="btn-mode-multi"  type="button" class="secondary outline">Multiple entries</button>
+      <button id="btn-mode-paste"  type="button" class="secondary outline">Paste from customer portal (ServiceNow)</button>
     </div>
 
     <!-- ── Single entry form ── -->
@@ -109,7 +127,7 @@
         <option value="">Select a project...</option>
       </select>
 
-      <label for="p-paste">Paste your weekly timesheet here</label>
+      <label for="p-paste">Paste your weekly timesheet here from ServiceNow</label>
       <textarea id="p-paste" rows="10" placeholder="Copy the timesheet from the customer portal and paste it here..."></textarea>
 
       <div class="paste-actions">
@@ -137,6 +155,28 @@
       </div>
     </div>
 
+    <!-- ── Multiple entries mode ── -->
+    <div id="multi-section" hidden>
+      <table class="multi-table">
+        <thead>
+          <tr>
+            <th class="col-date">Date</th>
+            <th class="col-proj">Project</th>
+            <th class="col-hours">Hours</th>
+            <th class="col-task">Task ID <small style="font-weight:normal;color:var(--pico-muted-color)">optional</small></th>
+            <th class="col-desc">Description <small style="font-weight:normal;color:var(--pico-muted-color)">optional</small></th>
+            <th class="col-rm"></th>
+          </tr>
+        </thead>
+        <tbody id="multi-tbody"></tbody>
+      </table>
+      <div class="multi-actions">
+        <button id="btn-add-row" type="button" class="secondary outline">+ Add row</button>
+        <button id="btn-multi-save" type="button">Save all entries</button>
+        <span id="multi-error" class="error"></span>
+      </div>
+    </div>
+
     <!-- Success state (shared) -->
     <div id="view-success" hidden>
       <div class="success-box">
@@ -160,6 +200,8 @@
     const modeToggle     = document.getElementById('mode-toggle');
     const logForm        = document.getElementById('log-form');
     const pasteSection   = document.getElementById('paste-section');
+    const multiSection   = document.getElementById('multi-section');
+    const multiTbody     = document.getElementById('multi-tbody');
     const viewSuccess    = document.getElementById('view-success');
     const formError      = document.getElementById('form-error');
     const projectSelect  = document.getElementById('f-project');
@@ -205,15 +247,20 @@
 
     // ---- Mode toggle ----
     document.getElementById('btn-mode-single').addEventListener('click', () => setMode('single'));
+    document.getElementById('btn-mode-multi').addEventListener('click',  () => setMode('multi'));
     document.getElementById('btn-mode-paste').addEventListener('click',  () => setMode('paste'));
 
     function setMode(mode) {
       currentMode = mode;
       logForm.hidden       = mode !== 'single';
+      multiSection.hidden  = mode !== 'multi';
       pasteSection.hidden  = mode !== 'paste';
       viewSuccess.hidden   = true;
       document.getElementById('btn-mode-single').className = mode === 'single' ? '' : 'secondary outline';
+      document.getElementById('btn-mode-multi').className  = mode === 'multi'  ? '' : 'secondary outline';
       document.getElementById('btn-mode-paste').className  = mode === 'paste'  ? '' : 'secondary outline';
+      // Seed multi-table with one row on first open
+      if (mode === 'multi' && !multiTbody.children.length) addMultiRow(todayISO());
     }
 
     // ---- Single entry form ----
@@ -252,6 +299,78 @@
         viewSuccess.hidden = false;
       } catch (err) {
         formError.textContent = 'Failed to save: ' + err.message;
+      } finally {
+        btn.removeAttribute('aria-busy');
+        btn.disabled = false;
+      }
+    });
+
+    // ---- Multiple entries mode ----
+
+    function buildProjectOptions() {
+      return myProjects.map(p =>
+        `<option value="${esc(p.id)}">${esc(p.name)}${p.billable ? '' : ' (non-billable)'}</option>`
+      ).join('');
+    }
+
+    function addMultiRow(date) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="col-date"><input type="date" class="m-date" value="${esc(date)}"></td>
+        <td class="col-proj"><select class="m-project"><option value="">Select...</option>${buildProjectOptions()}</select></td>
+        <td class="col-hours"><input type="number" class="m-hours" step="0.5" min="0.5" max="24" placeholder="hrs"></td>
+        <td class="col-task"><input type="text" class="m-task" placeholder="optional"></td>
+        <td class="col-desc"><input type="text" class="m-desc" placeholder="optional"></td>
+        <td class="col-rm"><button type="button" class="btn-rm contrast outline">&times;</button></td>`;
+      tr.querySelector('.btn-rm').addEventListener('click', () => {
+        if (multiTbody.children.length > 1) { tr.remove(); }
+      });
+      multiTbody.appendChild(tr);
+    }
+
+    document.getElementById('btn-add-row').addEventListener('click', () => {
+      const rows = multiTbody.querySelectorAll('tr');
+      const lastDate = rows.length ? rows[rows.length - 1].querySelector('.m-date').value : todayISO();
+      addMultiRow(lastDate || todayISO());
+    });
+
+    document.getElementById('btn-multi-save').addEventListener('click', async () => {
+      const multiError = document.getElementById('multi-error');
+      multiError.textContent = '';
+
+      const rows = [...multiTbody.querySelectorAll('tr')];
+      const entries = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row    = rows[i];
+        const date   = row.querySelector('.m-date').value;
+        const projId = row.querySelector('.m-project').value;
+        const hours  = parseFloat(row.querySelector('.m-hours').value);
+        const taskId = row.querySelector('.m-task').value.trim() || null;
+        const desc   = row.querySelector('.m-desc').value.trim() || null;
+        const project = myProjects.find(p => p.id === projId);
+
+        if (!date)        { multiError.textContent = `Row ${i + 1}: please enter a date.`; return; }
+        if (!projId)      { multiError.textContent = `Row ${i + 1}: please select a project.`; return; }
+        if (isNaN(hours)) { multiError.textContent = `Row ${i + 1}: please enter valid hours.`; return; }
+        if (project?.requiresTaskId && !taskId) {
+          multiError.textContent = `Row ${i + 1}: task ID is required for this project.`;
+          return;
+        }
+        entries.push({ id: crypto.randomUUID(), date, projectId: projId, hours, taskId, description: desc });
+      }
+
+      const btn = document.getElementById('btn-multi-save');
+      btn.setAttribute('aria-busy', 'true');
+      btn.disabled = true;
+
+      try {
+        await saveEntries(entries);
+        document.getElementById('success-msg').textContent = `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} saved.`;
+        multiSection.hidden = true;
+        viewSuccess.hidden  = false;
+      } catch (err) {
+        multiError.textContent = 'Failed to save: ' + err.message;
       } finally {
         btn.removeAttribute('aria-busy');
         btn.disabled = false;
@@ -360,6 +479,11 @@
         renderTaskField();
         formError.textContent = '';
         logForm.hidden = false;
+      } else if (currentMode === 'multi') {
+        multiTbody.innerHTML = '';
+        addMultiRow(todayISO());
+        document.getElementById('multi-error').textContent = '';
+        multiSection.hidden = false;
       } else {
         document.getElementById('p-paste').value = '';
         document.getElementById('parse-error').textContent = '';
