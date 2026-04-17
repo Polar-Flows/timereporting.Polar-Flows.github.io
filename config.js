@@ -12,7 +12,7 @@ export const config = {
     // Add both of these in Azure AD -> Authentication -> SPA redirect URIs:
     //   https://timereporting.polarflows.com/
     //   http://localhost:8000/
-    redirectUri: 'https://timereporting.polarflows.com/',
+    redirectUri: 'http://localhost:8000/',
   },
   sharePoint: {
     // Run these once in the browser console (after login) to find your IDs:

@@ -326,7 +326,12 @@
       <div id="paste-section" hidden>
         <label for="pp-project">Project</label>
         <select id="pp-project"><option value="">Select a project...</option></select>
-        <label for="pp-paste">Paste your weekly timesheet from ServiceNow</label>
+        <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.3rem;">
+          <label for="pp-paste" style="margin:0;">Paste your weekly timesheet from ServiceNow</label>
+          <button id="btn-sn-help" type="button"
+                  style="padding:0.15rem 0.45rem;font-size:0.78rem;line-height:1.4;background:#e9ecef;color:#6c757d;border:1px solid #ced4da;border-radius:var(--pico-border-radius);cursor:pointer;flex-shrink:0;"
+                  title="How to copy the timesheet from ServiceNow">?</button>
+        </div>
         <textarea id="pp-paste" rows="10" placeholder="Copy from the customer portal and paste here..."></textarea>
         <div class="paste-actions">
           <button id="btn-parse" type="button">Parse entries</button>
@@ -858,6 +863,17 @@
           pasteSec.hidden = false;
         }
       });
+
+      // - ServiceNow paste help -
+      const snHelpPanel = document.getElementById('sn-help-panel');
+      document.getElementById('btn-sn-help').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const rect = e.currentTarget.getBoundingClientRect();
+        snHelpPanel.style.top  = (rect.bottom + window.scrollY + 6) + 'px';
+        snHelpPanel.style.left = Math.max(8, rect.right - 320 + window.scrollX) + 'px';
+        snHelpPanel.classList.toggle('open');
+      });
+      document.addEventListener('click', () => snHelpPanel.classList.remove('open'));
     }
 
     // =
@@ -1488,6 +1504,17 @@
 
     })();
   </script>
+
+  <!-- - ServiceNow paste help panel - -->
+  <div id="sn-help-panel" class="ext-help-panel">
+    <strong>What to copy from ServiceNow</strong>
+    <ol>
+      <li>In ServiceNow, open <strong>My Weekly Time Sheet</strong> and navigate to the week you want to log.</li>
+      <li>Scroll down to the <strong>Logged Time Cards</strong> table — make sure all your task rows are visible.</li>
+      <li>Select the table (starting from date on the upper left e.g.<code>March 23 - March 29, 2026</code> to the last entry on bottom right) and copy (<strong>Ctrl+C</strong>).</li>
+      <li>Paste here. The parser reads the date range header and every task row with non-zero hours.</li>
+    </ol>
+  </div>
 
   <!-- - Addanex extension install help panel - -->
   <div id="ext-help-panel" class="ext-help-panel">
