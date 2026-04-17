@@ -79,6 +79,10 @@
     @media (min-width: 768px)  { .pf-section { padding: 2rem 2.5rem; } }
     @media (min-width: 1200px) { .pf-section { padding: 2rem 4rem; } }
     #app-loading { padding: 3rem 1.5rem; }
+    #section-admin { max-width: 1800px; }
+    @media (min-width: 1200px) {
+      #section-admin > hgroup { margin-left: max(0px, calc((100% - 1152px) / 2)); }
+    }
 
     /* - Shared - */
     .error   { color: var(--pico-del-color, #c62828); font-size: 0.9rem; }
