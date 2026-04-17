@@ -19,6 +19,7 @@
       --pico-primary-inverse: #fff;
       font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
+    html { overflow-y: scroll; }
     body { background: #f8fafc !important; --pico-background-color: #f8fafc; }
 
     /* - Persistent navbar - */
@@ -99,7 +100,7 @@
     .btn-month-nav { width: auto; margin: 0; padding: 0.3rem 0.7rem; font-size: 1rem; line-height: 1; }
 
     /* - Log Time - */
-    .mode-toggle { display: flex; gap: 0; margin-bottom: 1.5rem; }
+    .mode-toggle { display: flex; gap: 0; margin-bottom: 1.5rem; position: relative; z-index: 1; }
     .mode-toggle button { margin: 0; width: auto; flex: 1 0 auto; border-radius: 0; font-size: 0.9rem; }
     .mode-toggle button:first-child { border-radius: var(--pico-border-radius) 0 0 var(--pico-border-radius); }
     .mode-toggle button:last-child  { border-radius: 0 var(--pico-border-radius) var(--pico-border-radius) 0; }
@@ -176,9 +177,9 @@
       border: 1px solid var(--pico-table-border-color, #ddd);
       border-bottom: none;
       border-radius: var(--pico-border-radius) var(--pico-border-radius) 0 0;
-      background: var(--pico-card-background-color, #f9f9f9);
+      background: transparent;
     }
-    .view-toggle { display: flex; gap: 0; }
+    .view-toggle { display: flex; gap: 0; position: relative; z-index: 1; }
     .view-toggle button, #viz-btn-export, #viz-btn-broker {
       margin: 0; width: auto; padding: 0.35rem 0.85rem; font-size: 0.85rem; line-height: 1.4;
     }
@@ -237,9 +238,41 @@
       .pf-nav-inner { padding: 0 1rem; }
       .pf-nav-links button { padding: 0 0.6rem; font-size: 0.82rem; }
     }
+
+    /* - Background watermark logo - */
+    .pf-bg-watermark {
+      position: fixed;
+      top: 52%;
+      right: 10%;
+      transform: translateY(-50%);
+      opacity: 0.25;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .pf-bg-watermark img {
+      width: 250px;
+      height: 250px;
+      object-fit: contain;
+      filter: brightness(0.9) contrast(1.1);
+    }
+    @media (max-width: 767px) {
+      .pf-bg-watermark { right: 5%; opacity: 0.2; }
+      .pf-bg-watermark img { width: 150px; height: 150px; }
+    }
+    @media (min-width: 768px) {
+      .pf-bg-watermark img { width: 400px; height: 400px; }
+    }
+    /* Ensure hidden sections take no space and have no background
+       so the fixed watermark is never covered or clipped */
+    [hidden] { display: none !important; }
+    #log-form { background: transparent !important; }
   </style>
 </head>
 <body>
+
+  <div class="pf-bg-watermark" aria-hidden="true">
+    <img src="assets/img/Polarflows-logo.png" alt="">
+  </div>
 
   <!-- - Navbar - -->
   <nav class="pf-nav" id="pf-nav" hidden>
